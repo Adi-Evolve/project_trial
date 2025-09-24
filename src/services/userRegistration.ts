@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import EnhancedSupabaseService from './enhancedSupabase';
 import { advancedContractService } from './advancedContracts';
 import { toast } from 'react-hot-toast';
 
@@ -91,14 +92,24 @@ class UserRegistrationService {
 
       console.log('Saving user to Supabase...', supabaseUserData);
 
-      const { data: supabaseRecord, error: supabaseError } = await supabase
-        .from('users')
-        .upsert(supabaseUserData)
-        .select()
-        .single();
+      let supabaseRecord;
+      try {
+        supabaseRecord = await EnhancedSupabaseService.createUser(supabaseUserData);
+      } catch (enhancedError: any) {
+        // If enhanced service fails, try direct upsert
+        console.warn('Enhanced service failed, trying direct upsert:', enhancedError.message);
+        
+        const { data: directData, error: supabaseError } = await supabase
+          .from('users')
+          .upsert(supabaseUserData)
+          .select()
+          .single();
 
-      if (supabaseError) {
-        throw new Error(`Supabase registration failed: ${supabaseError.message}`);
+        if (supabaseError) {
+          throw new Error(`Supabase registration failed: ${supabaseError.message} (Code: ${supabaseError.code})`);
+        }
+        
+        supabaseRecord = directData;
       }
 
       console.log('Supabase registration successful:', supabaseRecord);
@@ -148,23 +159,29 @@ class UserRegistrationService {
   // Get user by wallet address from Supabase
   async getUserByWallet(walletAddress: string): Promise<any> {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('wallet_address', walletAddress.toLowerCase())
-        .single();
-
-      if (error) {
-        if (error.code === 'PGRST116') {
-          return null; // User not found
-        }
-        throw new Error(`Failed to fetch user: ${error.message}`);
-      }
-
-      return data;
+      return await EnhancedSupabaseService.getUserByWallet(walletAddress);
     } catch (error) {
-      console.error('Failed to get user by wallet:', error);
-      return null;
+      console.error('Enhanced service failed, trying direct query:', error);
+      
+      try {
+        const { data, error: directError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('wallet_address', walletAddress.toLowerCase())
+          .single();
+
+        if (directError) {
+          if (directError.code === 'PGRST116') {
+            return null; // User not found
+          }
+          throw new Error(`Failed to fetch user: ${directError.message}`);
+        }
+
+        return data;
+      } catch (fallbackError) {
+        console.error('Failed to get user by wallet:', fallbackError);
+        return null;
+      }
     }
   }
 

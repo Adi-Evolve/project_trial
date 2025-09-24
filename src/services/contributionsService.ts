@@ -1,10 +1,11 @@
 import { supabase } from './supabase';
+import EnhancedSupabaseService from './enhancedSupabase';
 import { toast } from 'react-hot-toast';
 
 export interface ContributionData {
   id?: string;
   project_id: string;
-  contributor_id: string;
+  contributor_id: string | null; // Allow null for anonymous contributions
   amount: number;
   currency: string;
   blockchain_tx_hash: string;
@@ -44,19 +45,39 @@ class ContributionsService {
     try {
       console.log('💰 Saving contribution to Supabase:', contribution);
 
-      const { data, error } = await supabase
-        .from('contributions')
-        .insert([contribution])
-        .select()
-        .single();
+      // Try enhanced service first
+      try {
+        const data = await EnhancedSupabaseService.saveContribution(contribution);
+        console.log('✅ Contribution saved successfully (enhanced):', data);
+        return { success: true, contribution: data };
+      } catch (enhancedError: any) {
+        console.warn('Enhanced service failed, trying direct insert:', enhancedError.message);
+        
+        // Fallback to direct insert
+        const { data, error } = await supabase
+          .from('contributions')
+          .insert([contribution])
+          .select()
+          .single();
 
-      if (error) {
-        console.error('❌ Failed to save contribution:', error);
-        return { success: false, error: error.message };
+        if (error) {
+          console.error('❌ Failed to save contribution:', {
+            code: error.code,
+            message: error.message,
+            details: error.details
+          });
+          
+          let errorMessage = error.message;
+          if (error.code === '42501') {
+            errorMessage = 'Database permissions error. Please contact support or run database setup.';
+          }
+          
+          return { success: false, error: errorMessage };
+        }
+
+        console.log('✅ Contribution saved successfully (direct):', data);
+        return { success: true, contribution: data };
       }
-
-      console.log('✅ Contribution saved successfully:', data);
-      return { success: true, contribution: data };
 
     } catch (error: any) {
       console.error('❌ Error saving contribution:', error);
@@ -127,13 +148,12 @@ class ContributionsService {
         .eq('id', projectId)
         .single();
 
-      // If not found by UUID, try by title or other identifier
+      // If not found by UUID, try by exact title match
       if (projectError || !project) {
         const { data: projectByTitle, error: titleError } = await supabase
           .from('projects')
           .select('id')
-          .ilike('title', `%${projectId}%`)
-          .limit(1)
+          .eq('title', projectId)
           .single();
 
         if (titleError || !projectByTitle) {
@@ -266,21 +286,59 @@ class ContributionsService {
         txHash
       });
 
-      // First, get the project UUID
-      const { data: project, error: projectError } = await supabase
+      // First, get the project UUID - try by ID first, then by title
+      let project = null;
+      let projectError = null;
+
+      // Try direct UUID lookup first
+      const { data: directProject, error: directError } = await supabase
         .from('projects')
         .select('id')
         .eq('id', projectId)
         .single();
 
+      if (directProject) {
+        project = directProject;
+      } else {
+        // If direct lookup fails, try by title (for blockchain project IDs)
+        const { data: titleProject, error: titleError } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('title', projectId)
+          .single();
+        
+        project = titleProject;
+        projectError = titleError;
+      }
+
       if (projectError || !project) {
         return { success: false, error: 'Project not found' };
+      }
+
+      // Handle contributor ID - if it's a wallet address, try to find user or use null
+      let finalContributorId: string | null = contributorId;
+      
+      // Check if contributorId looks like a wallet address (starts with 0x)
+      if (contributorId && contributorId.startsWith('0x')) {
+        // Try to find user by wallet address
+        const { data: userByWallet } = await supabase
+          .from('users')
+          .select('id')
+          .eq('wallet_address', contributorId)
+          .single();
+          
+        if (userByWallet) {
+          finalContributorId = userByWallet.id;
+        } else {
+          // If no user found with this wallet, allow anonymous contribution
+          finalContributorId = null;
+        }
       }
 
       // Save the contribution
       const contributionData: Omit<ContributionData, 'id' | 'created_at'> = {
         project_id: project.id,
-        contributor_id: contributorId,
+        contributor_id: finalContributorId,
         amount,
         currency,
         blockchain_tx_hash: txHash,

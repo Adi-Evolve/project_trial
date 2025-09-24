@@ -131,6 +131,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = useCallback(async (walletAddress: string, userData: Partial<User>) => {
     const now = new Date();
+    
+    // First, try to get existing user from Supabase to get proper UUID
+    let supabaseUserId = walletAddress; // Fallback to wallet address
+    
+    try {
+      const existingUser = await userRegistrationService.getUserByWallet(walletAddress);
+      if (existingUser && existingUser.id) {
+        supabaseUserId = existingUser.id; // Use the proper UUID from Supabase
+        console.log('Found existing user in Supabase with UUID:', supabaseUserId);
+      }
+    } catch (error) {
+      console.log('Could not fetch user from Supabase, using wallet address as ID');
+    }
+    
     const newUser: User = {
       walletAddress,
       email: userData.email || '',
@@ -143,8 +157,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       isVerified: true,
       isEmailVerified: userData.isEmailVerified || false,
       joinedAt: userData.joinedAt || now,
-      // Set compatibility fields
-      id: walletAddress,
+      // Set compatibility fields - use proper UUID if available
+      id: supabaseUserId,
       username: userData.name || walletAddress.slice(0, 8),
       fullName: userData.name || '',
       avatarUrl: userData.avatarUrl
@@ -169,6 +183,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // Continue with local storage even if registration fails
         } else {
           console.log('User registered successfully:', registrationResult);
+          // Update the user ID with the proper UUID from Supabase
+          if (registrationResult.supabaseRecord && registrationResult.supabaseRecord.id) {
+            newUser.id = registrationResult.supabaseRecord.id;
+            console.log('Updated user ID to Supabase UUID:', newUser.id);
+          }
         }
       } catch (error) {
         console.error('Error during user registration:', error);

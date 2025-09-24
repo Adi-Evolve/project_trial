@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   WalletIcon,
-  CurrencyDollarIcon,
-  HeartIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ArrowPathIcon,
@@ -12,6 +10,7 @@ import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
 import { web3Service, ProjectData } from '../../services/web3';
 import { contributionsService } from '../../services/contributionsService';
 import { transactionMonitorService } from '../../services/transactionMonitorService';
+import { localStorageService } from '../../services/localStorage';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
 
@@ -168,7 +167,61 @@ const DonationWidget: React.FC<DonationWidgetProps> = ({
         userId: user.id
       });
 
-      // Process blockchain transaction
+      // First, check if project exists on blockchain, if not create it
+      console.log('🔍 Checking if project exists on blockchain...');
+      let projectExists = await web3Service.getProject(projectId);
+      
+      if (!projectExists) {
+        console.log('📝 Project not found on blockchain, creating it first...');
+        
+        // Get project data from local storage to create on blockchain
+        const localProject = await localStorageService.getProjectById(projectId);
+        if (!localProject) {
+          throw new Error('Project not found in local storage');
+        }
+
+        // Convert funding goal to ETH (ensure it's a string)
+        const targetAmountEth = localProject.fundingGoal?.toString() || '1.0';
+        
+        // Set deadline (default to 30 days from now if not specified)
+        let deadline = new Date();
+        if (localProject.deadline) {
+          deadline = new Date(localProject.deadline);
+        } else {
+          deadline.setDate(deadline.getDate() + 30); // 30 days from now
+        }
+
+        console.log('🚀 Creating project on blockchain:', {
+          projectId,
+          targetAmount: targetAmountEth + ' ETH',
+          deadline: deadline.toISOString()
+        });
+
+        const createResult = await web3Service.createProject(
+          projectId,
+          targetAmountEth,
+          deadline
+        );
+
+        if (!createResult.success) {
+          throw new Error(`Failed to create project on blockchain: ${createResult.error}`);
+        }
+
+        console.log('✅ Project created on blockchain:', createResult.transactionHash);
+        
+        // Wait a moment for the transaction to be mined
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Verify project was created
+        projectExists = await web3Service.getProject(projectId);
+        if (!projectExists) {
+          throw new Error('Project creation verification failed');
+        }
+      } else {
+        console.log('✅ Project already exists on blockchain');
+      }
+
+      // Process blockchain donation transaction
       const result = await web3Service.donate(
         projectId,
         formData.amount,

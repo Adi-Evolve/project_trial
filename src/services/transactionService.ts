@@ -56,23 +56,20 @@ class TransactionService {
   async saveTransaction(transactionData: TransactionData): Promise<{ success: boolean; id?: string; error?: string }> {
     try {
       const { data, error } = await supabase
-        .from('transactions')
+        .from('blockchain_transactions')
         .insert([{
           tx_hash: transactionData.txHash,
           from_address: transactionData.fromAddress,
           to_address: transactionData.toAddress,
-          amount: parseFloat(transactionData.amount),
+          value: parseFloat(transactionData.amount),
           gas_used: transactionData.gasUsed,
           gas_price: transactionData.gasPrice ? parseFloat(transactionData.gasPrice) : null,
           block_number: transactionData.blockNumber,
           block_hash: transactionData.blockHash,
           status: transactionData.status,
-          network: transactionData.network,
-          nonce: transactionData.nonce,
           transaction_index: transactionData.transactionIndex,
           contract_address: transactionData.contractAddress,
-          logs: transactionData.logs,
-          error_message: transactionData.errorMessage,
+          logs: transactionData.logs || [],
           confirmed_at: transactionData.status === 'confirmed' ? new Date().toISOString() : null
         }])
         .select()
@@ -111,7 +108,7 @@ class TransactionService {
 
       // Get transaction data
       const { data: transactionData, error: transactionError } = await supabase
-        .from('transactions')
+        .from('blockchain_transactions')
         .select('id')
         .eq('tx_hash', donationData.transactionHash)
         .single();
@@ -342,7 +339,7 @@ class TransactionService {
         .select('id')
         .eq('donor_wallet_address', donationData.donorWalletAddress)
         .eq('transaction_id', (await supabase
-          .from('transactions')
+          .from('blockchain_transactions')
           .select('id')
           .eq('tx_hash', donationData.transactionHash)
           .single()
@@ -350,7 +347,7 @@ class TransactionService {
         .single();
 
       const { data: transactionRecord } = await supabase
-        .from('transactions')
+        .from('blockchain_transactions')
         .select('id')
         .eq('tx_hash', donationData.transactionHash)
         .single();
@@ -425,7 +422,7 @@ class TransactionService {
         .select(`
           *,
           projects!inner(project_id),
-          transactions(tx_hash, block_number, confirmed_at)
+          blockchain_transactions(tx_hash, block_number, confirmed_at)
         `)
         .eq('projects.project_id', projectId)
         .eq('status', 'completed')
@@ -455,7 +452,7 @@ class TransactionService {
         .select(`
           *,
           projects(project_id, title, creator_wallet_address),
-          transactions(tx_hash, block_number, confirmed_at)
+          blockchain_transactions(tx_hash, block_number, confirmed_at)
         `)
         .eq('donor_id', userId)
         .order('created_at', { ascending: false });
@@ -480,7 +477,7 @@ class TransactionService {
   }> {
     try {
       const { data, error } = await supabase
-        .from('transactions')
+        .from('blockchain_transactions')
         .select('*')
         .eq('tx_hash', txHash)
         .single();
@@ -506,7 +503,7 @@ class TransactionService {
         if (receipt) {
           // Update transaction status in database
           await supabase
-            .from('transactions')
+            .from('blockchain_transactions')
             .update({
               status: receipt.status ? 'confirmed' : 'failed',
               block_number: receipt.blockNumber,
@@ -523,7 +520,7 @@ class TransactionService {
               confirmed_at: new Date().toISOString()
             })
             .eq('transaction_id', (await supabase
-              .from('transactions')
+              .from('blockchain_transactions')
               .select('id')
               .eq('tx_hash', txHash)
               .single()

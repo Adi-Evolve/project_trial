@@ -488,6 +488,52 @@ class Web3Service {
       console.log('💰 Starting donation process...');
       console.log(`📊 Project: ${projectId}, Amount: ${amountEth} ETH`);
 
+      // First, verify the project exists and is valid
+      console.log('🔍 Verifying project exists on blockchain...');
+      const projectData = await this.getProject(projectId);
+      
+      if (!projectData) {
+        console.log('❌ Project not found on blockchain');
+        const error = {
+          code: 'project_not_found',
+          message: `Project ${projectId} does not exist on the blockchain. Please ensure the project has been created first.`
+        };
+        const errorDetails = errorHandler.handleError(error, context);
+        return { success: false, error: errorDetails.userMessage };
+      }
+
+      console.log('✅ Project found on blockchain:', {
+        creator: projectData.creator,
+        targetAmount: projectData.targetAmount + ' ETH',
+        raisedAmount: projectData.raisedAmount + ' ETH',
+        deadline: new Date(projectData.deadline * 1000).toISOString(),
+        isActive: projectData.isActive,
+        fundsWithdrawn: projectData.fundsWithdrawn
+      });
+
+      // Check if project is active
+      if (!projectData.isActive) {
+        console.log('❌ Project is not active');
+        const error = {
+          code: 'project_inactive',
+          message: 'This project is no longer accepting donations as it has been deactivated.'
+        };
+        const errorDetails = errorHandler.handleError(error, context);
+        return { success: false, error: errorDetails.userMessage };
+      }
+
+      // Check if deadline has passed
+      const currentTime = Math.floor(Date.now() / 1000);
+      if (projectData.deadline && currentTime > projectData.deadline) {
+        console.log('❌ Project deadline has passed');
+        const error = {
+          code: 'project_expired',
+          message: `This project's funding deadline has passed on ${new Date(projectData.deadline * 1000).toLocaleDateString()}.`
+        };
+        const errorDetails = errorHandler.handleError(error, context);
+        return { success: false, error: errorDetails.userMessage };
+      }
+
       const amountWei = this.web3!.utils.toWei(amountEth, 'ether');
       console.log(`💎 Amount in Wei: ${amountWei}`);
 

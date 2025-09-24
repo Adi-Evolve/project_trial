@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { supabase } from '../services/supabase';
 import { useAuth } from './AuthContext';
 import { toast } from 'react-hot-toast';
+import { ensureValidUserUUID } from '../utils/userUtils';
 
 interface Message {
   id: string;
@@ -80,6 +81,12 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [typingUsers, setTypingUsers] = useState<{ [chatId: string]: string[] }>({});
   const [loading, setLoading] = useState(true);
+  
+  // Helper function to get valid user UUID
+  const getValidUserUUID = async (): Promise<string | null> => {
+    if (!user || !user.id) return null;
+    return await ensureValidUserUUID(user.id);
+  };
 
   useEffect(() => {
     if (user) {
@@ -109,12 +116,22 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     if (!user) return;
 
     try {
+      // Ensure we have a valid UUID for the user
+      const validUserUUID = await ensureValidUserUUID(user.id);
+      
+      if (!validUserUUID) {
+        console.warn('Could not get valid UUID for user, skipping chat loading');
+        setChats([]);
+        setLoading(false);
+        return;
+      }
+      
       // Load user's chats from Supabase - simplified query
       // For now, just get basic chat data without complex joins
       const { data: chatData, error } = await supabase
         .from('chats')
         .select('*')
-        .eq('created_by', user.id)
+        .eq('created_by', validUserUUID)
         .order('created_at', { ascending: false }); // Use created_at instead of last_activity
 
       if (error) {
