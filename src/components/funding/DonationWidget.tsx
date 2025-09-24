@@ -10,6 +10,10 @@ import {
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolid } from '@heroicons/react/24/solid';
 import { web3Service, ProjectData } from '../../services/web3';
+import { contributionsService } from '../../services/contributionsService';
+import { transactionMonitorService } from '../../services/transactionMonitorService';
+import { useAuth } from '../../context/AuthContext';
+import { toast } from 'react-hot-toast';
 
 interface DonationWidgetProps {
   projectId: string;
@@ -33,6 +37,7 @@ const DonationWidget: React.FC<DonationWidgetProps> = ({
   onDonationSuccess,
   onDonationError,
 }) => {
+  const { user } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
@@ -152,6 +157,18 @@ const DonationWidget: React.FC<DonationWidgetProps> = ({
     setIsLoading(true);
 
     try {
+      // Check if user is authenticated
+      if (!user) {
+        throw new Error('Please sign in to make a contribution');
+      }
+
+      console.log('🔄 Starting donation process:', {
+        projectId,
+        amount: formData.amount,
+        userId: user.id
+      });
+
+      // Process blockchain transaction
       const result = await web3Service.donate(
         projectId,
         formData.amount,
@@ -159,6 +176,30 @@ const DonationWidget: React.FC<DonationWidgetProps> = ({
       );
 
       if (result.success && result.transactionHash) {
+        console.log('✅ Blockchain transaction successful:', result.transactionHash);
+        
+        // Save contribution to database
+        const contributionResult = await contributionsService.processContribution(
+          projectId,
+          user.id!,
+          parseFloat(formData.amount),
+          'ETH',
+          result.transactionHash,
+          formData.message || undefined,
+          false // Not anonymous
+        );
+
+        if (contributionResult.success) {
+          console.log('✅ Contribution saved to database');
+          toast.success('Contribution saved successfully!');
+          
+          // Start monitoring transaction for confirmation
+          transactionMonitorService.startMonitoring(result.transactionHash);
+        } else {
+          console.warn('⚠️ Blockchain succeeded but database save failed:', contributionResult.error);
+          toast.error('Transaction succeeded but failed to save to database');
+        }
+
         setTransactionHash(result.transactionHash);
         setStep('success');
         
@@ -173,6 +214,7 @@ const DonationWidget: React.FC<DonationWidgetProps> = ({
         throw new Error(result.error || 'Transaction failed');
       }
     } catch (error: any) {
+      console.error('❌ Donation failed:', error);
       setError(error.message || 'Donation failed');
       setStep('error');
       

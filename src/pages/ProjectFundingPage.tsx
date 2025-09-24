@@ -15,8 +15,10 @@ import {
 } from '@heroicons/react/24/outline';
 import DonationWidget from '../components/funding/DonationWidget';
 import { web3Service, ProjectData as BlockchainProjectData } from '../services/web3';
-import { transactionService } from '../services/transactionService';
+import { contributionsService } from '../services/contributionsService';
 import { useAuth } from '../context/AuthContext';
+import { localStorageService } from '../services/localStorage';
+import { userRegistrationService } from '../services/userRegistration';
 
 interface FundingTier {
   id: string;
@@ -74,34 +76,47 @@ const ProjectFundingPage: React.FC = () => {
       setBlockchainProject(blockchainData);
 
       // Load donations
-      const donationsResult = await transactionService.getProjectDonations(id);
-      if (donationsResult.success) {
-        setDonations(donationsResult.donations || []);
+      const contributionsResult = await contributionsService.getProjectContributions(id);
+      if (contributionsResult.success) {
+        setDonations(contributionsResult.contributions || []);
       }
 
-      // Mock project data - in real app, this would come from Supabase
-      const mockProject: ProjectInfo = {
-        id: id,
-        title: 'AI-Powered Code Assistant',
-        description: 'An intelligent code completion and debugging tool powered by machine learning',
+      // Load actual project data from localStorage
+      const storedProject = localStorageService.getProjectById(id);
+      
+      if (!storedProject) {
+        setError('Project not found');
+        setIsLoading(false);
+        return;
+      }
+
+      // Get creator's details from registration service
+      const creatorDetails = await userRegistrationService.getUserByWallet(storedProject.creatorAddress || storedProject.creatorId);
+
+      const projectInfo: ProjectInfo = {
+        id: storedProject.id,
+        title: storedProject.title,
+        description: storedProject.description,
         owner: {
-          id: 'user-1',
-          name: 'Sarah Chen',
-          avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face',
-          email: 'sarah.chen@example.com'
+          id: storedProject.creatorId,
+          name: creatorDetails?.name || storedProject.creatorName || 'Project Creator',
+          avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face',
+          email: creatorDetails?.email || 'creator@project.com'
         },
         funding: {
-          goal: blockchainData?.targetAmount || '5.0',
-          raised: blockchainData?.raisedAmount || '0.0',
+          goal: blockchainData?.targetAmount || storedProject.fundingGoal.toString(),
+          raised: blockchainData?.raisedAmount || storedProject.currentFunding.toString(),
           backers: donations.length,
-          deadline: new Date(2025, 5, 15), // June 15, 2025
+          deadline: new Date(storedProject.deadline)
         },
-        banner: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&h=400&fit=crop',
-        category: 'Technology',
-        status: 'active'
+        banner: storedProject.imageHashes && storedProject.imageHashes.length > 0 
+          ? `https://gateway.pinata.cloud/ipfs/${storedProject.imageHashes[0]}`
+          : 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&h=400&fit=crop',
+        category: storedProject.category || 'Technology',
+        status: storedProject.status as 'active' | 'inactive' | 'completed' | 'cancelled'
       };
 
-      setProject(mockProject);
+      setProject(projectInfo);
     } catch (error: any) {
       console.error('Failed to load project data:', error);
       setError('Failed to load project data');
@@ -115,8 +130,14 @@ const ProjectFundingPage: React.FC = () => {
       // Refresh project data after successful donation
       await loadProjectData();
       
-      // The donation processing is handled in the DonationWidget component
       console.log('Donation successful:', { transactionHash, amount });
+      
+      // Redirect to project details with success message
+      setTimeout(() => {
+        navigate(`/projects/${id}?funded=true&amount=${amount}&tx=${transactionHash}`, {
+          replace: true
+        });
+      }, 2000); // Give time for the success animation to show
     } catch (error) {
       console.error('Error handling donation success:', error);
     }

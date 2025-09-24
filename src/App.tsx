@@ -30,6 +30,8 @@ import NotificationsPage from './pages/NotificationsPage';
 import FollowingPage from './pages/FollowingPage';
 import SearchResultsPage from './pages/SearchResultsPage';
 import EmailServiceDemo from './components/testing/EmailServiceDemo';
+import TestFundTransferPage from './pages/TestFundTransferPage';
+import { TestEscrowPage } from './pages/TestEscrowPage';
 import { AuthFlow } from './components/auth/AuthFlow';
 import WelcomeBack from './components/auth/WelcomeBack';
 import LandingPage from './components/landing/LandingPage';
@@ -234,6 +236,16 @@ const AppContent: React.FC = () => {
         <Route path="/search" element={
           <Layout>
             <SearchResultsPage />
+          </Layout>
+        } />
+        <Route path="/test-fund-transfer" element={
+          <Layout>
+            <TestFundTransferPage />
+          </Layout>
+        } />
+        <Route path="/test-escrow" element={
+          <Layout>
+            <TestEscrowPage />
           </Layout>
         } />
         

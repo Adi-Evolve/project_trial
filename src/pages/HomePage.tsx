@@ -8,7 +8,8 @@ import {
   StarIcon,
   ArrowRightIcon,
   PlayIcon,
-  FireIcon
+  FireIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../context/AuthContext';
 
@@ -436,6 +437,47 @@ const HomePage: React.FC = () => {
                   Learn More
                 </motion.button>
               </div>
+            </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* Developer Testing Section - Only show when authenticated */}
+      {isAuthenticated && (
+        <section className="py-16 bg-gray-50 dark:bg-gray-900">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.8 }}
+              className="text-center"
+            >
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                🧪 Developer Testing Lab
+              </h2>
+              <p className="text-gray-600 dark:text-gray-300 mb-8">
+                Test the complete funding mechanism with real Sepolia transactions
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Link
+                  to="/test-fund-transfer"
+                  className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-medium rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all shadow-lg hover:shadow-xl"
+                >
+                  <RocketLaunchIcon className="h-5 w-5 mr-2" />
+                  Test Fund Transfer (0.001 ETH)
+                </Link>
+                <Link
+                  to="/test-escrow"
+                  className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white font-medium rounded-lg hover:from-green-700 hover:to-teal-700 transition-all shadow-lg hover:shadow-xl"
+                >
+                  <ShieldCheckIcon className="h-5 w-5 mr-2" />
+                  Test Escrow System
+                </Link>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                Testing with MetaMask address: 0xbC96A75605fee7614b77877D9871A77CA9e7E022
+              </p>
             </motion.div>
           </div>
         </section>

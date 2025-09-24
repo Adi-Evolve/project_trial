@@ -1,7 +1,8 @@
 import Web3 from 'web3';
 import { Contract } from 'web3-eth-contract';
+import { errorHandler } from './errorHandler';
 
-// Contract ABI (Application Binary Interface) for our ProjectFunding contract
+// Smart contract ABI for project funding
 export const PROJECT_FUNDING_ABI = [
   {
     "inputs": [
@@ -341,10 +342,19 @@ class Web3Service {
   }
 
   async connectWallet(): Promise<{ success: boolean; account?: string; error?: string }> {
+    const context = errorHandler.createContext('connectWallet', 'Web3Service');
+    
     try {
       if (!window.ethereum) {
-        return { success: false, error: 'MetaMask not installed' };
+        const error = {
+          code: 'no_metamask',
+          message: 'MetaMask extension not detected'
+        };
+        const errorDetails = errorHandler.handleError(error, context);
+        return { success: false, error: errorDetails.userMessage };
       }
+
+      console.log('🔗 Attempting to connect to MetaMask...');
 
       // Request account access
       const accounts = await window.ethereum.request({
@@ -352,38 +362,55 @@ class Web3Service {
       });
 
       if (accounts.length === 0) {
-        return { success: false, error: 'No accounts found' };
+        const error = {
+          code: 'no_accounts',
+          message: 'No accounts available'
+        };
+        const errorDetails = errorHandler.handleError(error, context);
+        return { success: false, error: errorDetails.userMessage };
       }
 
       this.account = accounts[0];
+      console.log('✅ Connected to account:', this.account);
 
       // Check if we're on the correct network
       const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      console.log('🌐 Current network:', chainId);
       
       if (chainId !== SEPOLIA_CONFIG.chainId) {
+        console.log('🔄 Switching to Sepolia network...');
+        
         // Try to switch to Sepolia
         try {
           await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: SEPOLIA_CONFIG.chainId }],
           });
+          console.log('✅ Successfully switched to Sepolia');
         } catch (switchError: any) {
+          console.log('📡 Network switch error:', switchError);
+          
           // If the chain doesn't exist, add it
           if (switchError.code === 4902) {
+            console.log('➕ Adding Sepolia network to MetaMask...');
             await window.ethereum.request({
               method: 'wallet_addEthereumChain',
               params: [SEPOLIA_CONFIG],
             });
+            console.log('✅ Sepolia network added successfully');
           } else {
             throw switchError;
           }
         }
+      } else {
+        console.log('✅ Already on Sepolia network');
       }
 
       return { success: true, account: this.account || undefined };
     } catch (error: any) {
-      console.error('Failed to connect wallet:', error);
-      return { success: false, error: error.message || 'Failed to connect wallet' };
+      console.error('❌ Wallet connection failed:', error);
+      const errorDetails = errorHandler.handleError(error, context);
+      return { success: false, error: errorDetails.userMessage };
     }
   }
 
@@ -445,12 +472,40 @@ class Web3Service {
     amountEth: string,
     message: string = ''
   ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
+    const context = errorHandler.createContext('donate', 'Web3Service', 
+      `projectId: ${projectId}, amount: ${amountEth} ETH`);
+    
     try {
       if (!this.contract || !this.account) {
-        throw new Error('Contract or account not available');
+        const error = {
+          code: 'service_not_ready',
+          message: 'Web3 service not properly initialized'
+        };
+        const errorDetails = errorHandler.handleError(error, context);
+        return { success: false, error: errorDetails.userMessage };
       }
 
+      console.log('💰 Starting donation process...');
+      console.log(`📊 Project: ${projectId}, Amount: ${amountEth} ETH`);
+
       const amountWei = this.web3!.utils.toWei(amountEth, 'ether');
+      console.log(`💎 Amount in Wei: ${amountWei}`);
+
+      // Check user balance before transaction
+      const balanceWei = await this.web3!.eth.getBalance(this.account);
+      const balanceEth = this.web3!.utils.fromWei(balanceWei, 'ether');
+      console.log(`💳 Current balance: ${balanceEth} ETH`);
+
+      if (parseFloat(balanceEth) < parseFloat(amountEth)) {
+        const error = {
+          code: 'insufficient_funds',
+          message: `Insufficient balance. Required: ${amountEth} ETH, Available: ${balanceEth} ETH`
+        };
+        const errorDetails = errorHandler.handleError(error, context);
+        return { success: false, error: errorDetails.userMessage };
+      }
+
+      console.log('🚀 Sending donation transaction...');
 
       const tx = await this.contract.methods
         .donate(projectId, message)
@@ -459,10 +514,14 @@ class Web3Service {
           value: amountWei
         });
 
+      console.log('✅ Donation successful!');
+      console.log(`🔗 Transaction hash: ${tx.transactionHash}`);
+
       return { success: true, transactionHash: tx.transactionHash };
     } catch (error: any) {
-      console.error('Failed to donate:', error);
-      return { success: false, error: error.message || 'Failed to donate' };
+      console.error('❌ Donation failed:', error);
+      const errorDetails = errorHandler.handleError(error, context);
+      return { success: false, error: errorDetails.userMessage };
     }
   }
 
@@ -642,6 +701,113 @@ class Web3Service {
       throw error;
     }
   }
+
+  /**
+   * Send direct ETH transfer (for testing purposes)
+   */
+  async sendDirectTransfer(
+    to: string,
+    amountEth: string
+  ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
+    const context = errorHandler.createContext('sendDirectTransfer', 'Web3Service', 
+      `to: ${to}, amount: ${amountEth} ETH`);
+    
+    try {
+      if (!this.web3 || !this.account) {
+        const error = {
+          code: 'service_not_ready',
+          message: 'Web3 service not properly initialized'
+        };
+        const errorDetails = errorHandler.handleError(error, context);
+        return { success: false, error: errorDetails.userMessage };
+      }
+
+      console.log('🔄 Starting direct ETH transfer...');
+      console.log(`📤 From: ${this.account}`);
+      console.log(`📥 To: ${to}`);
+      console.log(`💰 Amount: ${amountEth} ETH`);
+
+      // Validate recipient address
+      if (!this.web3.utils.isAddress(to)) {
+        const error = {
+          code: 'invalid_address',
+          message: `Invalid recipient address: ${to}`
+        };
+        const errorDetails = errorHandler.handleError(error, context);
+        return { success: false, error: errorDetails.userMessage };
+      }
+
+      const amountWei = this.web3.utils.toWei(amountEth, 'ether');
+      console.log(`💎 Amount in Wei: ${amountWei}`);
+
+      // Check user balance before transaction
+      const balanceWei = await this.web3.eth.getBalance(this.account);
+      const balanceEth = this.web3.utils.fromWei(balanceWei, 'ether');
+      console.log(`💳 Current balance: ${balanceEth} ETH`);
+
+      if (parseFloat(balanceEth) < parseFloat(amountEth)) {
+        const error = {
+          code: 'insufficient_funds',
+          message: `Insufficient balance. Required: ${amountEth} ETH, Available: ${balanceEth} ETH`
+        };
+        const errorDetails = errorHandler.handleError(error, context);
+        return { success: false, error: errorDetails.userMessage };
+      }
+      
+      console.log('⛽ Estimating gas...');
+      // Estimate gas
+      const gasEstimate = await this.web3.eth.estimateGas({
+        from: this.account,
+        to: to,
+        value: amountWei
+      });
+
+      const gasWithBuffer = Math.floor(Number(gasEstimate) * 1.2);
+      console.log(`⛽ Gas estimate: ${gasEstimate}, with buffer: ${gasWithBuffer}`);
+
+      console.log('🚀 Sending transaction...');
+      // Send transaction
+      const receipt = await this.web3.eth.sendTransaction({
+        from: this.account,
+        to: to,
+        value: amountWei,
+        gas: gasWithBuffer // Add 20% buffer
+      });
+
+      console.log('✅ Direct transfer successful!');
+      console.log(`🔗 Transaction hash: ${receipt.transactionHash}`);
+
+      return { 
+        success: true, 
+        transactionHash: receipt.transactionHash?.toString() || ''
+      };
+    } catch (error: any) {
+      console.error('❌ Direct transfer failed:', error);
+      const errorDetails = errorHandler.handleError(error, context);
+      return { success: false, error: errorDetails.userMessage };
+    }
+  }
+
+  /**
+   * Helper method to convert Wei to Ether
+   */
+  convertWeiToEth(weiAmount: string): string {
+    if (!this.web3) {
+      throw new Error('Web3 not initialized');
+    }
+    return this.web3.utils.fromWei(weiAmount, 'ether');
+  }
+
+  /**
+   * Helper method to convert Ether to Wei
+   */
+  convertEthToWei(ethAmount: string): string {
+    if (!this.web3) {
+      throw new Error('Web3 not initialized');
+    }
+    return this.web3.utils.toWei(ethAmount, 'ether');
+  }
+
 }
 
 // Export singleton instance

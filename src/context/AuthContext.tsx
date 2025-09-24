@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
 import { emailVerificationService } from '../services/emailVerification';
+import { userRegistrationService } from '../services/userRegistration';
 
 interface User {
   walletAddress: string;
@@ -32,7 +33,7 @@ interface AuthContextType {
   walletInfo: WalletInfo | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (walletAddress: string, userData: Partial<User>) => void;
+  login: (walletAddress: string, userData: Partial<User>) => Promise<void>;
   logout: () => void;
   updateUser: (userData: Partial<User>) => void;
   connectWallet: (walletInfo: WalletInfo) => void;
@@ -128,7 +129,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []); // Empty dependency array for MetaMask listeners
 
-  const login = useCallback((walletAddress: string, userData: Partial<User>) => {
+  const login = useCallback(async (walletAddress: string, userData: Partial<User>) => {
     const now = new Date();
     const newUser: User = {
       walletAddress,
@@ -148,6 +149,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       fullName: userData.name || '',
       avatarUrl: userData.avatarUrl
     };
+
+    // Register user in blockchain and Supabase if this is a new user
+    if (userData.name && userData.email && userData.dateOfBirth && userData.role) {
+      try {
+        const registrationResult = await userRegistrationService.registerUser({
+          walletAddress,
+          email: userData.email,
+          name: userData.name,
+          dateOfBirth: userData.dateOfBirth,
+          role: userData.role,
+          bio: userData.bio,
+          skills: userData.skills,
+          interests: userData.interests
+        });
+
+        if (!registrationResult.success) {
+          console.error('User registration failed:', registrationResult.message);
+          // Continue with local storage even if registration fails
+        } else {
+          console.log('User registered successfully:', registrationResult);
+        }
+      } catch (error) {
+        console.error('Error during user registration:', error);
+      }
+    }
 
     const walletInfo: WalletInfo = {
       address: walletAddress,
