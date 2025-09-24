@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { mockAuth, MockUser } from './mockAuth';
 import { User, ApiResponse } from '../types';
 import { toast } from 'react-hot-toast';
 
@@ -19,51 +18,10 @@ export interface AuthResponse {
   error: any;
 }
 
-// Check if we're in mock mode (when Supabase isn't properly configured)
-const isMockMode = () => {
-  const url = process.env.REACT_APP_SUPABASE_URL;
-  return !url || url === 'your_supabase_url_here' || url === 'https://demo.supabase.co';
-};
-
-// Mock user data for demo
-const convertMockToUser = (mockUser: MockUser): User => ({
-  id: mockUser.id,
-  email: mockUser.email,
-  username: mockUser.email.split('@')[0],
-  fullName: mockUser.name,
-  avatarUrl: mockUser.avatar_url,
-  skills: ['JavaScript', 'React', 'TypeScript'],
-  fieldsOfInterest: ['Web Development', 'AI/ML', 'Blockchain'],
-  reputation: Math.floor(Math.random() * 1000),
-  verified: true,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString()
-});
-
 class AuthService {
-  private useMock = isMockMode();
 
   // Sign up with email and password
   async signUp(credentials: SignUpCredentials): Promise<AuthResponse> {
-    if (this.useMock) {
-      try {
-        const { data, error } = await mockAuth.signUp(credentials.email, credentials.password);
-        if (error) throw error;
-        
-        const user = data?.user ? convertMockToUser(data.user) : null;
-        toast.success('Account created successfully! Welcome to ProjectForge!');
-        
-        return {
-          user,
-          session: { access_token: 'mock-token', user: data?.user },
-          error: null
-        };
-      } catch (error: any) {
-        toast.error(error.message || 'Failed to create account');
-        return { user: null, session: null, error };
-      }
-    }
-
     try {
       const { data, error } = await supabase.auth.signUp({
         email: credentials.email,
@@ -80,18 +38,25 @@ class AuthService {
 
       // Create user profile in our users table
       if (data.user) {
-        await this.createUserProfile({
-          id: data.user.id,
-          email: credentials.email,
-          username: credentials.username,
-          fullName: credentials.fullName,
-          skills: [],
-          fieldsOfInterest: [],
-          reputation: 0,
-          verified: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
+        // Create user profile with database schema fields
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert({
+            id: data.user.id,
+            wallet_address: `email-${data.user.id.slice(0, 8)}`, // Temporary placeholder
+            email: credentials.email,
+            username: credentials.username,
+            full_name: credentials.fullName,
+            skills: [],
+            reputation_score: 0,
+            email_verified: false,
+            is_active: true
+          });
+
+        if (profileError) {
+          console.error('Error creating user profile:', profileError);
+          throw new Error('Failed to create user profile');
+        }
       }
 
       toast.success('Account created successfully! Please check your email for verification.');
@@ -116,25 +81,6 @@ class AuthService {
 
   // Sign in with email and password
   async signIn(credentials: AuthCredentials): Promise<AuthResponse> {
-    if (this.useMock) {
-      try {
-        const { data, error } = await mockAuth.signInWithPassword(credentials.email, credentials.password);
-        if (error) throw error;
-        
-        const user = data?.user ? convertMockToUser(data.user) : null;
-        toast.success('Welcome back!');
-        
-        return {
-          user,
-          session: { access_token: 'mock-token', user: data?.user },
-          error: null
-        };
-      } catch (error: any) {
-        toast.error(error.message || 'Failed to sign in');
-        return { user: null, session: null, error };
-      }
-    }
-
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: credentials.email,
@@ -165,25 +111,6 @@ class AuthService {
 
   // Sign in with Google
   async signInWithGoogle(): Promise<AuthResponse> {
-    if (this.useMock) {
-      try {
-        const { data, error } = await mockAuth.signInWithOAuth('google');
-        if (error) throw error;
-        
-        const user = data?.user ? convertMockToUser(data.user) : null;
-        toast.success('Signed in with Google!');
-        
-        return {
-          user,
-          session: { access_token: 'mock-token', user: data?.user },
-          error: null
-        };
-      } catch (error: any) {
-        toast.error(error.message || 'Failed to sign in with Google');
-        return { user: null, session: null, error };
-      }
-    }
-
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -215,25 +142,6 @@ class AuthService {
 
   // Sign in with GitHub
   async signInWithGitHub(): Promise<AuthResponse> {
-    if (this.useMock) {
-      try {
-        const { data, error } = await mockAuth.signInWithOAuth('github');
-        if (error) throw error;
-        
-        const user = data?.user ? convertMockToUser(data.user) : null;
-        toast.success('Signed in with GitHub!');
-        
-        return {
-          user,
-          session: { access_token: 'mock-token', user: data?.user },
-          error: null
-        };
-      } catch (error: any) {
-        toast.error(error.message || 'Failed to sign in with GitHub');
-        return { user: null, session: null, error };
-      }
-    }
-
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
@@ -261,16 +169,6 @@ class AuthService {
 
   // Sign out
   async signOut(): Promise<void> {
-    if (this.useMock) {
-      try {
-        await mockAuth.signOut();
-        toast.success('Signed out successfully');
-      } catch (error: any) {
-        toast.error(error.message || 'Failed to sign out');
-      }
-      return;
-    }
-
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
@@ -283,14 +181,6 @@ class AuthService {
 
   // Get current user
   async getCurrentUser(): Promise<User | null> {
-    if (this.useMock) {
-      const session = mockAuth.getSession();
-      if (session?.user) {
-        return convertMockToUser(session.user);
-      }
-      return null;
-    }
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -314,10 +204,6 @@ class AuthService {
 
   // Get current session
   async getCurrentSession() {
-    if (this.useMock) {
-      return mockAuth.getSession();
-    }
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       return session;
@@ -327,40 +213,14 @@ class AuthService {
     }
   }
 
-  // Create user profile
-  private async createUserProfile(userData: Partial<User>): Promise<void> {
-    if (this.useMock) {
-      // Mock mode - just return success
-      return;
-    }
 
-    try {
-      const { error } = await supabase
-        .from('users')
-        .insert([userData]);
-
-      if (error) throw error;
-    } catch (error: any) {
-      console.error('Error creating user profile:', error);
-      throw new Error('Failed to create user profile');
-    }
-  }
 
   // Update user profile
   async updateUserProfile(userId: string, updates: Partial<User>): Promise<ApiResponse<User>> {
-    if (this.useMock) {
-      toast.success('Profile updated successfully');
-      return {
-        data: { ...await this.getCurrentUser(), ...updates } as User,
-        message: 'Profile updated successfully',
-        success: true
-      };
-    }
-
     try {
       const { data, error } = await supabase
         .from('users')
-        .update({ ...updates, updatedAt: new Date().toISOString() })
+        .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', userId)
         .select()
         .single();
@@ -387,11 +247,6 @@ class AuthService {
 
   // Reset password
   async resetPassword(email: string): Promise<void> {
-    if (this.useMock) {
-      toast.success('Password reset email sent! (Demo mode)');
-      return;
-    }
-
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/auth/reset-password`
@@ -408,11 +263,6 @@ class AuthService {
 
   // Update password
   async updatePassword(newPassword: string): Promise<void> {
-    if (this.useMock) {
-      toast.success('Password updated successfully! (Demo mode)');
-      return;
-    }
-
     try {
       const { error } = await supabase.auth.updateUser({
         password: newPassword
@@ -429,19 +279,11 @@ class AuthService {
 
   // Listen to auth state changes
   onAuthStateChange(callback: (event: string, session: any) => void) {
-    if (this.useMock) {
-      return mockAuth.onAuthStateChange(callback);
-    }
     return supabase.auth.onAuthStateChange(callback);
   }
 
   // Verify email
   async verifyEmail(token: string): Promise<void> {
-    if (this.useMock) {
-      toast.success('Email verified successfully! (Demo mode)');
-      return;
-    }
-
     try {
       const { error } = await supabase.auth.verifyOtp({
         token_hash: token,
@@ -459,12 +301,6 @@ class AuthService {
 
   // Check if username is available
   async isUsernameAvailable(username: string): Promise<boolean> {
-    if (this.useMock) {
-      // In mock mode, allow most usernames except a few common ones
-      const unavailable = ['admin', 'test', 'demo', 'user'];
-      return !unavailable.includes(username.toLowerCase());
-    }
-
     try {
       const { data, error } = await supabase
         .from('users')
@@ -483,11 +319,6 @@ class AuthService {
 
   // Get user by username
   async getUserByUsername(username: string): Promise<User | null> {
-    if (this.useMock) {
-      // Mock implementation
-      return null;
-    }
-
     try {
       const { data, error } = await supabase
         .from('users')

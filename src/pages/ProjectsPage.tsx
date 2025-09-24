@@ -13,6 +13,8 @@ import {
 import ProjectCard from '../components/projects/ProjectCard';
 import ProjectForm from '../components/projects/ProjectForm';
 import { toast } from 'react-hot-toast';
+import { localStorageService } from '../services/localStorage';
+import { useAuth } from '../context/AuthContext';
 
 interface Project {
   id: string;
@@ -85,110 +87,146 @@ const ProjectsPage: React.FC = () => {
     teamSizeMax: 50
   });
 
-  // Mock data - in real app, this would come from your backend/database
-  const mockProjects: Project[] = [
-    {
-      id: '1',
-      title: 'AI-Powered Healthcare Assistant',
-      description: 'Developing an intelligent healthcare assistant that can analyze symptoms, provide preliminary diagnoses, and connect patients with healthcare professionals.',
-      category: 'Healthcare',
-      tags: ['AI', 'Healthcare', 'Machine Learning', 'Mobile App'],
-      fundingGoal: 50000,
-      fundingRaised: 32500,
-      deadline: '2025-12-31',
-      teamSize: 5,
-      skillsNeeded: ['Python', 'Machine Learning', 'React Native', 'UI/UX Design'],
-      createdBy: 'user1',
-      createdAt: '2025-09-01',
-      status: 'active',
-      supporters: ['user2', 'user3', 'user4'],
-      comments: 24,
-      likes: 156,
-      views: 842,
-      bookmarks: 23,
-      isLiked: false,
-      creator: {
-        id: 'user1',
-        username: 'healthtech_innovator',
-        avatar: '/avatars/user1.jpg',
-        verified: true
-      },
-      images: ['/projects/healthcare-ai.jpg'],
-      blockchainRecord: { txHash: '0x123...', verified: true }
-    },
-    {
-      id: '2',
-      title: 'Sustainable Energy IoT Platform',
-      description: 'Building a comprehensive IoT platform for monitoring and optimizing renewable energy systems in smart homes and commercial buildings.',
-      category: 'Environment',
-      tags: ['IoT', 'Sustainability', 'Energy', 'Smart Home'],
-      fundingGoal: 75000,
-      fundingRaised: 45000,
-      deadline: '2025-11-15',
-      teamSize: 8,
-      skillsNeeded: ['IoT', 'Node.js', 'React', 'Data Science', 'Hardware'],
-      createdBy: 'user2',
-      createdAt: '2025-08-15',
-      status: 'active',
-      supporters: ['user1', 'user3', 'user5', 'user6'],
-      comments: 18,
-      likes: 203,
-      views: 1256,
-      bookmarks: 45,
-      isLiked: true,
-      creator: {
-        id: 'user2',
-        username: 'green_tech_builder',
-        avatar: '/avatars/user2.jpg',
-        verified: true
-      },
-      images: ['/projects/iot-energy.jpg']
-    },
-    {
-      id: '3',
-      title: 'Educational VR Experience Platform',
-      description: 'Creating immersive virtual reality experiences for educational institutions to enhance learning through interactive 3D environments.',
-      category: 'Education',
-      tags: ['VR', 'Education', 'Unity', '3D Modeling'],
-      fundingGoal: 100000,
-      fundingRaised: 25000,
-      deadline: '2026-01-30',
-      teamSize: 6,
-      skillsNeeded: ['Unity', '3D Modeling', 'C#', 'VR Development', 'UI/UX Design'],
-      createdBy: 'user3',
-      createdAt: '2025-09-10',
-      status: 'active',
-      supporters: ['user1', 'user2'],
-      comments: 12,
-      likes: 89,
-      views: 567,
-      bookmarks: 15,
-      isLiked: false,
-      creator: {
-        id: 'user3',
-        username: 'vr_educator',
-        avatar: '/avatars/user3.jpg',
-        verified: false
-      },
-      images: ['/projects/vr-education.jpg'],
-      blockchainRecord: { txHash: '0x456...', verified: true }
-    }
-  ];
+
+
+
+  const { user } = useAuth();
 
   useEffect(() => {
-    // Simulate loading projects
-    setTimeout(() => {
-      setProjects(mockProjects);
-      setFilteredProjects(mockProjects);
-      setLoading(false);
-    }, 1000);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadProjects();
   }, []);
+
+  const loadProjects = async () => {
+    try {
+      setLoading(true);
+      
+      const storedProjects = localStorageService.getAllProjects();
+
+      // Transform the data to match our Project interface
+      const transformedProjects: Project[] = storedProjects.map((project: any) => {
+        return {
+          id: project.id,
+          title: project.title,
+          description: project.description,
+          category: project.category,
+          tags: project.tags || [],
+          fundingGoal: project.fundingGoal || 0,
+          fundingRaised: project.currentFunding || 0,
+          deadline: project.deadline || '',
+          teamSize: project.teamSize || 1,
+          skillsNeeded: project.technologies || [],
+          createdBy: project.creatorId,
+          createdAt: project.createdAt,
+          status: project.status as 'active' | 'funded' | 'expired',
+          supporters: project.supporters || [],
+          comments: project.comments || 0,
+          likes: project.likes || 0,
+          views: project.views || 0,
+          bookmarks: 0, // Basic implementation
+          isLiked: false, // Will be enhanced later
+          isBookmarked: false, // Will be enhanced later
+          creator: {
+            id: project.creatorId,
+            username: project.creatorName || 'Unknown Creator',
+            avatar: '', // Could be enhanced with user profile data
+            verified: false // Could be enhanced with verification system
+          },
+          images: project.imageHashes || [],
+          blockchainRecord: project.blockchainRecord ? {
+            txHash: project.blockchainRecord.txHash,
+            verified: project.blockchainRecord.verified || true,
+            blockNumber: project.blockchainRecord.blockNumber,
+            timestamp: project.blockchainRecord.timestamp
+          } : undefined
+        };
+      });
+
+      // Filter only active projects
+      const activeProjects = transformedProjects.filter(p => p.status === 'active');
+      
+
+      setProjects(activeProjects);
+      setFilteredProjects(activeProjects);
+      
+      if (activeProjects.length === 0) {
+        toast.success('📝 No projects found. Create your first project!', { duration: 3000 });
+      } else {
+        toast.success(`📊 Loaded ${activeProjects.length} projects successfully!`, { duration: 2000 });
+      }
+      
+    } catch (error) {
+      console.error('Error in loadProjects:', error);
+      toast.error('Failed to load projects from local storage');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     filterAndSortProjects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects, searchQuery, selectedCategory, sortBy, filters]);
+
+  const handleLikeProject = async (projectId: string) => {
+    if (!user) {
+      toast.error('Please log in to like projects');
+      return;
+    }
+
+    try {
+
+      
+      // Get current project
+      const currentProject = projects.find(p => p.id === projectId);
+      if (!currentProject) {
+        toast.error('Project not found');
+        return;
+      }
+
+      const isCurrentlyLiked = currentProject.isLiked;
+      
+      // Update local state immediately for responsive UI
+      setProjects(prev => prev.map(project => 
+        project.id === projectId 
+          ? { 
+              ...project, 
+              likes: isCurrentlyLiked ? project.likes - 1 : project.likes + 1, 
+              isLiked: !isCurrentlyLiked 
+            }
+          : project
+      ));
+
+      // Update filtered projects as well
+      setFilteredProjects(prev => prev.map(project => 
+        project.id === projectId 
+          ? { 
+              ...project, 
+              likes: isCurrentlyLiked ? project.likes - 1 : project.likes + 1, 
+              isLiked: !isCurrentlyLiked 
+            }
+          : project
+      ));
+
+      // For now, just show success message
+      // In a full implementation, this would update localStorage with user interactions
+      const action = isCurrentlyLiked ? 'unliked' : 'liked';
+      toast.success(`Project ${action} successfully! 👍`);
+      
+
+
+    } catch (error) {
+      console.error('Error in handleLikeProject:', error);
+      toast.error('Failed to update like status');
+      
+      // Revert the optimistic update on error
+      loadProjects();
+    }
+  };
+
+  const handleRefreshProjects = () => {
+    loadProjects();
+    toast.success('Projects refreshed');
+  };
 
   const filterAndSortProjects = () => {
     let filtered = [...projects];
@@ -241,25 +279,15 @@ const ProjectsPage: React.FC = () => {
     setFilteredProjects(filtered);
   };
 
-  const handleProjectCreate = (newProject: Project) => {
-    setProjects(prev => [newProject, ...prev]);
+  const handleProjectCreate = async (newProject: Project) => {
+    // Reload projects to get the latest data including the new project
+    await loadProjects();
     toast.success('Project created successfully!');
+    setShowCreateForm(false);
   };
 
   const handleProjectClick = (projectId: string) => {
     navigate(`/project/${projectId}`);
-  };
-
-  const handleLike = (projectId: string) => {
-    setProjects(prev => prev.map(project =>
-      project.id === projectId
-        ? {
-            ...project,
-            isLiked: !project.isLiked,
-            likes: project.isLiked ? project.likes - 1 : project.likes + 1
-          }
-        : project
-    ));
   };
 
   const handleComment = (projectId: string) => {
@@ -474,6 +502,15 @@ const ProjectsPage: React.FC = () => {
                 <ArrowPathIcon className="w-4 h-4" />
                 <span className="text-sm">Reset</span>
               </button>
+              
+              <button
+                onClick={handleRefreshProjects}
+                className="flex items-center space-x-2 px-3 py-2 text-gray-400 hover:text-white transition-colors duration-200"
+                disabled={loading}
+              >
+                <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span className="text-sm">Refresh</span>
+              </button>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -611,7 +648,7 @@ const ProjectsPage: React.FC = () => {
                   >
                     <ProjectCard
                       project={project}
-                      onLike={handleLike}
+                      onLike={handleLikeProject}
                       onComment={handleComment}
                       onShare={handleShare}
                       onClick={handleProjectClick}

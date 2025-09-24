@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import MetaMaskAuth from './MetaMaskAuth';
-import UserProfileSetup from './UserProfileSetup';
+import EnhancedRegistration from './EnhancedRegistration';
 import EmailVerification from './EmailVerification';
 import { useAuth } from '../../context/AuthContext';
 
@@ -30,9 +30,10 @@ export const AuthFlow: React.FC<AuthFlowProps> = ({
   };
 
   const handleProfileComplete = (userData: any) => {
-    setUserEmail(userData.email);
-    setTempUserData(userData);
-    setCurrentStep('email-verification');
+    // The EnhancedRegistration component already handles everything
+    // including blockchain registration and email verification
+    login(userData.wallet_address, userData);
+    onAuthComplete?.();
   };
 
   const handleEmailVerificationComplete = () => {
@@ -100,9 +101,8 @@ export const AuthFlow: React.FC<AuthFlowProps> = ({
       )}
       
       {currentStep === 'profile' && (
-        <UserProfileSetup 
+        <EnhancedRegistration 
           walletAddress={walletAddress}
-          isNewUser={isNewUser}
           onComplete={handleProfileComplete}
           onBack={() => setCurrentStep('wallet')}
         />

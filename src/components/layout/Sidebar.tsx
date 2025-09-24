@@ -13,7 +13,10 @@ import {
   TrophyIcon,
   HeartIcon,
   UserIcon,
-  Squares2X2Icon
+  Squares2X2Icon,
+  ChatBubbleLeftRightIcon,
+  QuestionMarkCircleIcon,
+  BellIcon
 } from '@heroicons/react/24/outline';
 import { 
   HomeIcon as HomeSolid,
@@ -26,7 +29,10 @@ import {
   TrophyIcon as TrophySolid,
   HeartIcon as HeartSolid,
   UserIcon as UserSolid,
-  Squares2X2Icon as Squares2X2Solid
+  Squares2X2Icon as Squares2X2Solid,
+  ChatBubbleLeftRightIcon as ChatBubbleLeftRightSolid,
+  QuestionMarkCircleIcon as QuestionMarkCircleSolid,
+  BellIcon as BellSolid
 } from '@heroicons/react/24/solid';
 
 interface SidebarProps {
@@ -118,6 +124,29 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       current: currentPath === '/project-management'
     },
     { 
+      name: 'Analytics', 
+      href: '/analytics', 
+      icon: ChartBarIcon, 
+      iconSolid: ChartBarSolid, 
+      current: currentPath === '/analytics'
+    },
+    { 
+      name: 'Messages', 
+      href: '/messages', 
+      icon: ChatBubbleLeftRightIcon, 
+      iconSolid: ChatBubbleLeftRightSolid, 
+      current: currentPath === '/messages',
+      count: 5
+    },
+    { 
+      name: 'Notifications', 
+      href: '/notifications', 
+      icon: BellIcon, 
+      iconSolid: BellSolid, 
+      current: currentPath === '/notifications',
+      count: 12
+    },
+    { 
       name: 'Community', 
       href: '/community', 
       icon: UserGroupIcon, 
@@ -150,6 +179,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   ];
 
   const bottomNavigation: NavigationItem[] = [
+    { 
+      name: 'Help', 
+      href: '/help', 
+      icon: QuestionMarkCircleIcon, 
+      iconSolid: QuestionMarkCircleSolid, 
+      current: currentPath === '/help' 
+    },
     { 
       name: 'Settings', 
       href: '/settings', 

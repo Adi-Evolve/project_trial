@@ -19,6 +19,17 @@ import ProjectManagementPage from './pages/ProjectManagementPage';
 import ProjectDetailsPage from './pages/ProjectDetailsPage';
 import ProjectFundingPage from './pages/ProjectFundingPage';
 import CreateProjectPage from './pages/CreateProjectPage';
+import EditProjectPage from './pages/EditProjectPage';
+import UserProfilePage from './pages/UserProfilePage';
+import MessagesPage from './pages/MessagesPage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import HelpPage from './pages/HelpPage';
+import SettingsPage from './pages/SettingsPage';
+import BookmarksPage from './pages/BookmarksPage';
+import NotificationsPage from './pages/NotificationsPage';
+import FollowingPage from './pages/FollowingPage';
+import SearchResultsPage from './pages/SearchResultsPage';
+import EmailServiceDemo from './components/testing/EmailServiceDemo';
 import { AuthFlow } from './components/auth/AuthFlow';
 import WelcomeBack from './components/auth/WelcomeBack';
 import LandingPage from './components/landing/LandingPage';
@@ -168,6 +179,61 @@ const AppContent: React.FC = () => {
         <Route path="/create-project" element={
           <Layout>
             <CreateProjectPage />
+          </Layout>
+        } />
+        <Route path="/edit-project/:id" element={
+          <Layout>
+            <EditProjectPage />
+          </Layout>
+        } />
+        <Route path="/user/:userId" element={
+          <Layout>
+            <UserProfilePage />
+          </Layout>
+        } />
+        <Route path="/messages" element={
+          <Layout>
+            <MessagesPage />
+          </Layout>
+        } />
+        <Route path="/analytics" element={
+          <Layout>
+            <AnalyticsPage />
+          </Layout>
+        } />
+        <Route path="/help" element={
+          <Layout>
+            <HelpPage />
+          </Layout>
+        } />
+        <Route path="/settings" element={
+          <Layout>
+            <SettingsPage />
+          </Layout>
+        } />
+        <Route path="/email-demo" element={
+          <Layout>
+            <EmailServiceDemo />
+          </Layout>
+        } />
+        <Route path="/bookmarks" element={
+          <Layout>
+            <BookmarksPage />
+          </Layout>
+        } />
+        <Route path="/notifications" element={
+          <Layout>
+            <NotificationsPage />
+          </Layout>
+        } />
+        <Route path="/following" element={
+          <Layout>
+            <FollowingPage />
+          </Layout>
+        } />
+        <Route path="/search" element={
+          <Layout>
+            <SearchResultsPage />
           </Layout>
         } />
         

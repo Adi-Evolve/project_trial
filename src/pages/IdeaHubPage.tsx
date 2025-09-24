@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   PlusIcon,
@@ -27,6 +27,9 @@ import {
   BookmarkIcon as BookmarkSolid,
   StarIcon as StarSolid
 } from '@heroicons/react/24/solid';
+import { supabase } from '../services/supabase';
+import { useAuth } from '../context/AuthContext';
+import { toast } from 'react-hot-toast';
 
 interface Idea {
   id: string;
@@ -58,6 +61,9 @@ interface Idea {
 }
 
 const IdeaHubPage: React.FC = () => {
+  const { user } = useAuth();
+  const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedComplexity, setSelectedComplexity] = useState('All');
@@ -65,142 +71,138 @@ const IdeaHubPage: React.FC = () => {
   const [sortBy, setSortBy] = useState('trending');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
-  // Mock ideas data
-  const [ideas, setIdeas] = useState<Idea[]>([
-    {
-      id: '1',
-      title: 'AI-Powered Learning Assistant for Students with Disabilities',
-      description: 'Create an intelligent tutoring system that adapts to different learning disabilities, providing personalized content delivery, voice-to-text capabilities, and progress tracking with visual/auditory feedback.',
-      category: 'AI/ML',
-      complexity: 'Advanced',
-      timeEstimate: '6-12 months',
-      author: {
-        id: '1',
-        name: 'Sarah Chen',
-        avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b1c7?w=50&h=50&fit=crop&crop=face',
-        reputation: 2450
-      },
-      upvotes: 128,
-      comments: 34,
-      views: 890,
-      shares: 15,
-      bookmarks: 67,
-      tags: ['AI', 'Education', 'Accessibility', 'Machine Learning', 'React'],
-      createdDate: '2024-02-10',
-      lastUpdated: '2024-02-12',
-      status: 'Seeking Team',
-      isLiked: true,
-      isBookmarked: false,
-      collaborators: 2,
-      requiredSkills: ['Python', 'TensorFlow', 'React', 'Node.js', 'UI/UX Design'],
-      lookingFor: ['ML Engineer', 'Frontend Developer', 'UX Designer']
-    },
-    {
-      id: '2',
-      title: 'Sustainable Supply Chain Tracker',
-      description: 'Blockchain-based platform to track products from source to consumer, ensuring ethical sourcing and environmental sustainability with real-time carbon footprint calculation.',
-      category: 'Blockchain',
-      complexity: 'Intermediate',
-      timeEstimate: '4-8 months',
-      author: {
-        id: '2',
-        name: 'Alex Rodriguez',
-        avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=50&h=50&fit=crop&crop=face',
-        reputation: 1890
-      },
-      upvotes: 95,
-      comments: 28,
-      views: 654,
-      shares: 12,
-      bookmarks: 43,
-      tags: ['Blockchain', 'Sustainability', 'Supply Chain', 'Environment', 'Web3'],
-      createdDate: '2024-02-08',
-      lastUpdated: '2024-02-11',
-      status: 'Open',
-      collaborators: 0,
-      requiredSkills: ['Solidity', 'React', 'Node.js', 'Web3.js'],
-      lookingFor: ['Blockchain Developer', 'Backend Developer', 'Product Manager']
-    },
-    {
-      id: '3',
-      title: 'Mental Health Support Network for Remote Workers',
-      description: 'Platform connecting remote workers with mental health resources, peer support groups, and AI-driven mood tracking with personalized wellness recommendations.',
-      category: 'Health',
-      complexity: 'Intermediate',
-      timeEstimate: '3-6 months',
-      author: {
-        id: '3',
-        name: 'Emily Johnson',
-        avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=50&h=50&fit=crop&crop=face',
-        reputation: 1650
-      },
-      upvotes: 156,
-      comments: 45,
-      views: 1200,
-      shares: 28,
-      bookmarks: 89,
-      tags: ['Health', 'Mental Wellness', 'Remote Work', 'Community', 'AI'],
-      createdDate: '2024-02-05',
-      lastUpdated: '2024-02-10',
-      status: 'In Progress',
-      isBookmarked: true,
-      collaborators: 3,
-      requiredSkills: ['React', 'Node.js', 'Python', 'UI/UX Design'],
-      lookingFor: ['Therapist/Counselor', 'Data Scientist', 'Mobile Developer']
-    },
-    {
-      id: '4',
-      title: 'Local Food Waste Reduction App',
-      description: 'Mobile app connecting restaurants, groceries, and consumers to reduce food waste through real-time surplus food notifications and pickup coordination.',
-      category: 'Environment',
-      complexity: 'Beginner',
-      timeEstimate: '2-4 months',
-      author: {
-        id: '4',
-        name: 'David Kim',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50&h=50&fit=crop&crop=face',
-        reputation: 980
-      },
-      upvotes: 203,
-      comments: 67,
-      views: 1450,
-      shares: 35,
-      bookmarks: 124,
-      tags: ['Environment', 'Food Waste', 'Mobile App', 'Community', 'Social Impact'],
-      createdDate: '2024-02-01',
-      lastUpdated: '2024-02-09',
-      status: 'Seeking Team',
-      collaborators: 1,
-      requiredSkills: ['React Native', 'Firebase', 'UI/UX Design'],
-      lookingFor: ['Mobile Developer', 'Backend Developer', 'Marketing Specialist']
-    },
-    {
-      id: '5',
-      title: 'Decentralized Scientific Research Collaboration Platform',
-      description: 'Create a platform where researchers worldwide can collaborate on studies, share data securely, and publish findings through decentralized peer review.',
-      category: 'Education',
-      complexity: 'Advanced',
-      timeEstimate: '8-12 months',
-      author: {
-        id: '5',
-        name: 'Dr. Maria Santos',
-        avatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=50&h=50&fit=crop&crop=face',
-        reputation: 3200
-      },
-      upvotes: 89,
-      comments: 23,
-      views: 567,
-      shares: 9,
-      bookmarks: 45,
-      tags: ['Research', 'Blockchain', 'Science', 'Collaboration', 'Peer Review'],
-      createdDate: '2024-01-28',
-      lastUpdated: '2024-02-07',
-      status: 'Open',
-      collaborators: 0,
-      requiredSkills: ['Blockchain', 'Python', 'Data Science', 'Security'],
-      lookingFor: ['Research Scientist', 'Blockchain Developer', 'Data Engineer']
+  useEffect(() => {
+    loadIdeas();
+  }, []);
+
+  const loadIdeas = async () => {
+    try {
+      setLoading(true);
+      
+      const { data, error } = await supabase
+        .from('ideas')
+        .select(`
+          *,
+          users:creator_id (
+            id,
+            username,
+            full_name,
+            avatar_url,
+            reputation_score
+          ),
+          votes(vote_type, user_id),
+          comments(id)
+        `)
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading ideas:', error);
+        toast.error('Failed to load ideas');
+        return;
+      }
+
+      // Transform the data to match our Idea interface
+      const transformedIdeas: Idea[] = data?.map(idea => {
+        const upvotes = idea.votes?.filter((v: any) => v.vote_type === 'up').length || 0;
+        const commentsCount = idea.comments?.length || 0;
+        const isLiked = user ? idea.votes?.some((vote: any) => vote.user_id === user.id && vote.vote_type === 'up') || false : false;
+
+        return {
+          id: idea.id,
+          title: idea.title,
+          description: idea.description,
+          category: idea.category,
+          complexity: idea.complexity || 'Intermediate',
+          timeEstimate: idea.time_estimate || '2-6 months',
+          author: {
+            id: idea.users?.id || idea.creator_id,
+            name: idea.users?.full_name || idea.users?.username || 'Unknown',
+            avatar: idea.users?.avatar_url || '',
+            reputation: idea.users?.reputation_score || 0
+          },
+          upvotes,
+          comments: commentsCount,
+          views: idea.view_count || 0,
+          shares: 0, // Would need separate tracking
+          bookmarks: 0, // Would need separate tracking
+          tags: idea.tags || [],
+          createdDate: idea.created_at,
+          lastUpdated: idea.updated_at,
+          status: idea.project_status || 'Open',
+          isLiked,
+          isBookmarked: false, // Would need separate bookmarks table
+          collaborators: 0, // Would need to count from a collaborators table
+          requiredSkills: idea.required_skills || [],
+          lookingFor: idea.looking_for || []
+        };
+      }) || [];
+
+      setIdeas(transformedIdeas);
+      
+    } catch (error) {
+      console.error('Error in loadIdeas:', error);
+      toast.error('Failed to load ideas');
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
+
+  const handleVoteIdea = async (ideaId: string, voteType: 'up' | 'down') => {
+    if (!user) {
+      toast.error('Please log in to vote on ideas');
+      return;
+    }
+
+    try {
+      // Check if user already voted
+      const { data: existingVote } = await supabase
+        .from('votes')
+        .select('*')
+        .eq('idea_id', ideaId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (existingVote) {
+        // Update existing vote
+        const { error } = await supabase
+          .from('votes')
+          .update({ vote_type: voteType })
+          .eq('idea_id', ideaId)
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.error('Error updating vote:', error);
+          toast.error('Failed to update vote');
+          return;
+        }
+      } else {
+        // Create new vote
+        const { error } = await supabase
+          .from('votes')
+          .insert({
+            idea_id: ideaId,
+            user_id: user.id,
+            vote_type: voteType
+          });
+
+        if (error) {
+          console.error('Error creating vote:', error);
+          toast.error('Failed to vote');
+          return;
+        }
+      }
+
+      // Reload ideas to get updated vote counts
+      await loadIdeas();
+      
+    } catch (error) {
+      console.error('Error in handleVoteIdea:', error);
+      toast.error('Failed to vote');
+    }
+  };
+
+
 
   const categories = ['All', 'AI/ML', 'Blockchain', 'Health', 'Environment', 'Education', 'Finance', 'Social Impact'];
   const complexityLevels = ['All', 'Beginner', 'Intermediate', 'Advanced'];

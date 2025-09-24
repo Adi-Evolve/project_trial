@@ -10,13 +10,17 @@ import {
   HeartIcon,
   ChatBubbleLeftIcon,
   SparklesIcon,
-  LockClosedIcon
+  LockClosedIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 import { 
   LightBulbIcon as LightBulbSolid,
   StarIcon as StarSolid
 } from '@heroicons/react/24/solid';
 import { toast } from 'react-hot-toast';
+import { supabase } from '../services/supabase';
+import { blockchainService } from '../services/blockchain';
+import { useAuth } from '../context/AuthContext';
 
 interface Idea {
   id: string;
@@ -72,6 +76,7 @@ const IDEAS_FILTERS = [
 ];
 
 const IdeasPage: React.FC = () => {
+  const { user } = useAuth();
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [filteredIdeas, setFilteredIdeas] = useState<Idea[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,118 +84,89 @@ const IdeasPage: React.FC = () => {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Form state for idea submission
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    category: 'Technology',
+    tags: '',
+    price: '',
+    currency: 'USD' as 'USD' | 'ETH',
+    type: 'collaboration' as 'exclusive' | 'license' | 'collaboration',
+    visibility: 'public' as 'public' | 'premium' | 'private'
+  });
 
-  // Mock data for ideas marketplace
-  const mockIdeas: Idea[] = [
-    {
-      id: '1',
-      title: 'AI-Powered Code Review Assistant',
-      description: 'Revolutionary AI system that automatically reviews code for bugs, security vulnerabilities, and optimization opportunities. Uses advanced machine learning to understand context and provide intelligent suggestions.',
-      category: 'AI/ML',
-      tags: ['AI', 'Code Review', 'Developer Tools', 'Machine Learning'],
-      author: {
-        name: 'alex_dev',
-        avatar: '/avatars/alex.jpg',
-        verified: true,
-        reputation: 4.8
-      },
-      price: 2.5,
-      currency: 'ETH',
-      type: 'exclusive',
-      visibility: 'public',
-      blockchain: {
-        verified: true,
-        txHash: '0x1234...abcd',
-        ipfsHash: 'QmX1Y2Z3...'
-      },
-      metrics: {
-        views: 1250,
-        likes: 89,
-        comments: 24,
-        rating: 4.7,
-        potential: 9.2
-      },
-      createdAt: '2025-09-10',
-      status: 'available',
-      bidding: {
-        enabled: true,
-        currentBid: 3.1,
-        bidders: 12,
-        endTime: '2025-09-20T12:00:00Z'
-      }
-    },
-    {
-      id: '2',
-      title: 'Sustainable Supply Chain Tracker',
-      description: 'Blockchain-based platform for tracking products throughout their entire supply chain, ensuring sustainability and ethical sourcing. Perfect for conscious consumers and businesses.',
-      category: 'Blockchain',
-      tags: ['Sustainability', 'Supply Chain', 'Blockchain', 'ESG'],
-      author: {
-        name: 'green_innovator',
-        avatar: '/avatars/green.jpg',
-        verified: true,
-        reputation: 4.6
-      },
-      price: 15000,
-      currency: 'USD',
-      type: 'license',
-      visibility: 'premium',
-      blockchain: {
-        verified: true,
-        txHash: '0x5678...efgh',
-        ipfsHash: 'QmA4B5C6...'
-      },
-      metrics: {
-        views: 890,
-        likes: 156,
-        comments: 31,
-        rating: 4.9,
-        potential: 8.8
-      },
-      createdAt: '2025-09-08',
-      status: 'available'
-    },
-    {
-      id: '3',
-      title: 'Mental Health Companion App',
-      description: 'AI-driven mental health application that provides personalized therapy sessions, mood tracking, and crisis intervention. Uses advanced psychology models and real-time data analysis.',
-      category: 'Healthcare',
-      tags: ['Mental Health', 'AI', 'Therapy', 'Wellness'],
-      author: {
-        name: 'dr_mindcare',
-        avatar: '/avatars/doctor.jpg',
-        verified: true,
-        reputation: 4.9
-      },
-      price: 1.8,
-      currency: 'ETH',
-      type: 'collaboration',
-      visibility: 'public',
-      blockchain: {
-        verified: true,
-        txHash: '0x9abc...ijkl',
-        ipfsHash: 'QmD7E8F9...'
-      },
-      metrics: {
-        views: 2100,
-        likes: 203,
-        comments: 67,
-        rating: 4.8,
-        potential: 9.5
-      },
-      createdAt: '2025-09-12',
-      status: 'available'
-    }
-  ];
+
 
   useEffect(() => {
-    // Simulate loading
-    setTimeout(() => {
-      setIdeas(mockIdeas);
-      setFilteredIdeas(mockIdeas);
-      setLoading(false);
-    }, 1000);
+    loadIdeas();
   }, []);
+
+  const loadIdeas = async () => {
+    try {
+      setLoading(true);
+      
+      const { data: ideasData, error } = await supabase
+        .from('ideas')
+        .select(`
+          *,
+          users!ideas_creator_id_fkey (
+            id,
+            username,
+            full_name,
+            avatar_url,
+            wallet_address,
+            reputation_score
+          )
+        `)
+        .eq('status', 'published')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedIdeas: Idea[] = ideasData?.map(idea => ({
+        id: idea.id,
+        title: idea.title,
+        description: idea.description,
+        category: idea.category,
+        tags: Array.isArray(idea.tags) ? idea.tags : [],
+        author: {
+          name: idea.users.username || idea.users.full_name || 'Anonymous',
+          avatar: idea.users.avatar_url || '/avatars/default.jpg',
+          verified: !!idea.users.wallet_address,
+          reputation: idea.users.reputation_score || 0
+        },
+        price: idea.price || 0,
+        currency: (idea.currency as 'ETH' | 'USD') || 'USD',
+        type: (idea.type as 'exclusive' | 'license' | 'collaboration') || 'collaboration',
+        visibility: (idea.visibility as 'public' | 'premium' | 'private') || 'public',
+        blockchain: {
+          verified: !!idea.tx_hash,
+          txHash: idea.tx_hash || '',
+          ipfsHash: idea.metadata_hash || ''
+        },
+        metrics: {
+          views: idea.views || 0,
+          likes: idea.likes || 0,
+          comments: 0, // Will be loaded separately if needed
+          rating: idea.rating || 0,
+          potential: Math.min((idea.likes || 0) / 10 + (idea.views || 0) / 100, 10)
+        },
+        createdAt: idea.created_at,
+        status: (idea.status as 'available' | 'sold' | 'pending' | 'draft') || 'available'
+      })) || [];
+
+      setIdeas(formattedIdeas);
+      setFilteredIdeas(formattedIdeas);
+    } catch (error) {
+      console.error('Error loading ideas:', error);
+      toast.error('Failed to load ideas');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     filterAndSortIdeas();
@@ -253,7 +229,109 @@ const IdeasPage: React.FC = () => {
   };
 
   const handleSubmitIdea = () => {
+    if (!user) {
+      toast.error('Please sign in to submit an idea');
+      return;
+    }
     setShowSubmitModal(true);
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user) {
+      toast.error('Please sign in to submit an idea');
+      return;
+    }
+
+    if (!formData.title.trim() || !formData.description.trim()) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      // First create the idea in the database
+      const ideaData = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        category: formData.category,
+        tags: formData.tags.split(',').map(tag => tag.trim()).filter(Boolean),
+        price: formData.price ? parseFloat(formData.price) : null,
+        currency: formData.currency,
+        type: formData.type,
+        visibility: formData.visibility,
+        creator_id: user.id,
+        status: 'published'
+      };
+
+      const { data: createdIdea, error: createError } = await supabase
+        .from('ideas')
+        .insert(ideaData)
+        .select()
+        .single();
+
+      if (createError) throw createError;
+
+      // Register idea on blockchain for ownership verification
+      try {
+        const blockchainResult = await blockchainService.registerIdea({
+          id: createdIdea.id,
+          title: createdIdea.title,
+          description: createdIdea.description,
+          author: user.id || 'anonymous',
+          timestamp: new Date().toISOString(),
+          category: createdIdea.category,
+          tags: createdIdea.tags
+        });
+
+        // Update the idea with blockchain transaction details
+        if (blockchainResult) {
+          const { error: updateError } = await supabase
+            .from('ideas')
+            .update({
+              tx_hash: blockchainResult.txHash,
+              block_number: blockchainResult.blockNumber,
+              metadata_hash: blockchainResult.txHash // Using txHash as metadata reference
+            })
+            .eq('id', createdIdea.id);
+
+          if (updateError) {
+            console.error('Failed to update idea with blockchain data:', updateError);
+          }
+
+          toast.success('Idea submitted and registered on blockchain!');
+        } else {
+          toast.success('Idea submitted! (Blockchain registration pending)');
+        }
+      } catch (blockchainError) {
+        console.error('Blockchain registration failed:', blockchainError);
+        toast.success('Idea submitted! (Blockchain registration pending)');
+      }
+
+      // Reset form and close modal
+      setFormData({
+        title: '',
+        description: '',
+        category: 'Technology',
+        tags: '',
+        price: '',
+        currency: 'USD',
+        type: 'collaboration',
+        visibility: 'public'
+      });
+      setShowSubmitModal(false);
+      
+      // Reload ideas to show the new one
+      loadIdeas();
+
+    } catch (error) {
+      console.error('Error submitting idea:', error);
+      toast.error('Failed to submit idea. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const formatPrice = (price: number, currency: string) => {
@@ -632,6 +710,206 @@ const IdeasPage: React.FC = () => {
         )}
         </div>
       </div>
+
+      {/* Submit Idea Modal */}
+      <AnimatePresence>
+        {showSubmitModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowSubmitModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-secondary-800 rounded-2xl border border-secondary-700/50 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-white">Submit New Idea</h2>
+                  <button
+                    onClick={() => setShowSubmitModal(false)}
+                    className="text-gray-400 hover:text-white transition-colors"
+                  >
+                    <XMarkIcon className="w-6 h-6" />
+                  </button>
+                </div>
+
+                {/* Form */}
+                <form onSubmit={handleFormSubmit} className="space-y-6">
+                  {/* Title */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Idea Title *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.title}
+                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      className="w-full px-4 py-3 bg-secondary-700 border border-secondary-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="Enter your innovative idea title..."
+                      maxLength={100}
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Description *
+                    </label>
+                    <textarea
+                      required
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      rows={4}
+                      className="w-full px-4 py-3 bg-secondary-700 border border-secondary-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                      placeholder="Describe your idea in detail..."
+                      maxLength={1000}
+                    />
+                  </div>
+
+                  {/* Category */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Category
+                    </label>
+                    <select
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      className="w-full px-4 py-3 bg-secondary-700 border border-secondary-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      {IDEAS_CATEGORIES.filter(cat => cat !== 'All').map(category => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Tags */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Tags (comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.tags}
+                      onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                      className="w-full px-4 py-3 bg-secondary-700 border border-secondary-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="AI, Innovation, Tech..."
+                    />
+                  </div>
+
+                  {/* Price and Currency */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Price (Optional)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.price}
+                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                        className="w-full px-4 py-3 bg-secondary-700 border border-secondary-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Currency
+                      </label>
+                      <select
+                        value={formData.currency}
+                        onChange={(e) => setFormData({ ...formData, currency: e.target.value as 'USD' | 'ETH' })}
+                        className="w-full px-4 py-3 bg-secondary-700 border border-secondary-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      >
+                        <option value="USD">USD</option>
+                        <option value="ETH">ETH</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Type */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Idea Type
+                    </label>
+                    <select
+                      value={formData.type}
+                      onChange={(e) => setFormData({ ...formData, type: e.target.value as typeof formData.type })}
+                      className="w-full px-4 py-3 bg-secondary-700 border border-secondary-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="collaboration">Collaboration</option>
+                      <option value="license">License</option>
+                      <option value="exclusive">Exclusive Sale</option>
+                    </select>
+                  </div>
+
+                  {/* Visibility */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Visibility
+                    </label>
+                    <select
+                      value={formData.visibility}
+                      onChange={(e) => setFormData({ ...formData, visibility: e.target.value as typeof formData.visibility })}
+                      className="w-full px-4 py-3 bg-secondary-700 border border-secondary-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="public">Public</option>
+                      <option value="premium">Premium</option>
+                      <option value="private">Private</option>
+                    </select>
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="flex items-center space-x-4 pt-4">
+                    <motion.button
+                      type="submit"
+                      disabled={submitting}
+                      whileHover={{ scale: submitting ? 1 : 1.02 }}
+                      whileTap={{ scale: submitting ? 1 : 0.98 }}
+                      className={`flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-lg font-medium transition-all duration-200 flex items-center justify-center space-x-2 ${
+                        submitting 
+                          ? 'opacity-50 cursor-not-allowed' 
+                          : 'hover:from-purple-400 hover:to-blue-400'
+                      }`}
+                    >
+                      {submitting ? (
+                        <>
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                            className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
+                          />
+                          <span>Submitting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <LightBulbSolid className="w-5 h-5" />
+                          <span>Submit Idea</span>
+                        </>
+                      )}
+                    </motion.button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSubmitModal(false)}
+                      className="px-6 py-3 bg-secondary-700 text-gray-300 rounded-lg font-medium hover:bg-secondary-600 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

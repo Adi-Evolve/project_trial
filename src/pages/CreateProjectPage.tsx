@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
+import { ipfsService } from '../services/ipfsService';
+import { advancedContractService, CampaignType } from '../services/advancedContracts';
+import mockBlockchainService from '../services/mockBlockchain';
+import { localStorageService } from '../services/localStorage';
 import {
   PlusIcon,
   PhotoIcon,
@@ -24,7 +30,8 @@ interface ProjectFormData {
   tags: string[];
   demoUrl: string;
   videoUrl: string;
-  images: string[];
+  images: File[];
+  imageUrls: string[];
   fundingGoal: number;
   deadline: string;
   teamSize: number;
@@ -32,6 +39,16 @@ interface ProjectFormData {
   features: string[];
   roadmap: RoadmapItem[];
   fundingTiers: FundingTier[];
+  milestones: MilestoneData[];
+}
+
+interface MilestoneData {
+  id: string;
+  title: string;
+  description: string;
+  targetAmount: number;
+  deadline: string;
+  deliverables: string[];
 }
 
 interface RoadmapItem {
@@ -53,6 +70,7 @@ interface FundingTier {
 
 const CreateProjectPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newTag, setNewTag] = useState('');
@@ -68,13 +86,15 @@ const CreateProjectPage: React.FC = () => {
     demoUrl: '',
     videoUrl: '',
     images: [],
+    imageUrls: [],
     fundingGoal: 0,
     deadline: '',
     teamSize: 1,
     technologies: [],
     features: [],
     roadmap: [],
-    fundingTiers: []
+    fundingTiers: [],
+    milestones: []
   });
 
   const categories = [
@@ -131,6 +151,28 @@ const CreateProjectPage: React.FC = () => {
     updateFormData('features', formData.features.filter(feature => feature !== featureToRemove));
   };
 
+  const addMilestone = () => {
+    const newMilestone: MilestoneData = {
+      id: Date.now().toString(),
+      title: '',
+      description: '',
+      targetAmount: 0,
+      deadline: '',
+      deliverables: []
+    };
+    updateFormData('milestones', [...formData.milestones, newMilestone]);
+  };
+
+  const updateMilestone = (id: string, field: keyof MilestoneData, value: any) => {
+    updateFormData('milestones', formData.milestones.map(milestone => 
+      milestone.id === id ? { ...milestone, [field]: value } : milestone
+    ));
+  };
+
+  const removeMilestone = (id: string) => {
+    updateFormData('milestones', formData.milestones.filter(milestone => milestone.id !== id));
+  };
+
   const addRoadmapItem = () => {
     const newItem: RoadmapItem = {
       id: Date.now().toString(),
@@ -174,20 +216,267 @@ const CreateProjectPage: React.FC = () => {
     updateFormData('fundingTiers', formData.fundingTiers.filter(tier => tier.id !== id));
   };
 
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length > 0) {
+      updateFormData('images', [...formData.images, ...files]);
+      
+      // Create preview URLs
+      const newImageUrls = files.map(file => URL.createObjectURL(file));
+      updateFormData('imageUrls', [...formData.imageUrls, ...newImageUrls]);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    const newImages = formData.images.filter((_, i) => i !== index);
+    const newImageUrls = formData.imageUrls.filter((_, i) => i !== index);
+    updateFormData('images', newImages);
+    updateFormData('imageUrls', newImageUrls);
+  };
+
   const handleSubmit = async () => {
+    if (!user) {
+      toast.error('Please log in to create a project');
+      return;
+    }
+
     setIsSubmitting(true);
+    let projectId: string | null = null;
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // In real app, you would submit to your backend
-    console.log('Project submitted:', formData);
-    
-    setIsSubmitting(false);
-    navigate('/projects');
+    try {
+      // Validate required fields
+      if (!formData.title || !formData.description || !formData.category || !formData.fundingGoal || !formData.deadline) {
+        toast.error('Please fill in all required fields');
+        return;
+      }
+
+      // Upload images to IPFS
+      let imageHashes: string[] = [];
+      if (formData.images.length > 0) {
+        toast.loading('Uploading images to IPFS...');
+        
+        for (const image of formData.images) {
+          try {
+            const result = await ipfsService.uploadFile(image, {
+              name: `project_image_${Date.now()}`,
+              type: 'project_image'
+            });
+            
+            if (result.success && result.ipfsHash) {
+              imageHashes.push(result.ipfsHash);
+
+            } else {
+              console.warn('Failed to upload image to IPFS:', result);
+            }
+          } catch (imageError) {
+            console.error('Error uploading image:', imageError);
+            toast.error(`Failed to upload image: ${image.name}`);
+          }
+        }
+        toast.dismiss();
+
+      }
+
+      // Create project metadata for IPFS
+      const projectMetadata = {
+        title: formData.title,
+        description: formData.description,
+        longDescription: formData.longDescription,
+        category: formData.category,
+        tags: formData.tags,
+        demoUrl: formData.demoUrl,
+        videoUrl: formData.videoUrl,
+        imageHashes,
+        technologies: formData.technologies,
+        features: formData.features,
+        roadmap: formData.roadmap,
+        fundingTiers: formData.fundingTiers,
+        milestones: formData.milestones,
+        teamSize: formData.teamSize
+      };
+
+      // Upload metadata to IPFS
+      toast.loading('Uploading project metadata to IPFS...');
+
+      
+      const metadataResult = await ipfsService.uploadJSON(projectMetadata, {
+        name: `project_metadata_${formData.title}`,
+        type: 'project_metadata'
+      });
+      toast.dismiss();
+
+      if (!metadataResult.success || !metadataResult.ipfsHash) {
+        throw new Error(`Failed to upload project metadata to IPFS: ${metadataResult.error || 'Unknown error'}`);
+      }
+      
+
+
+      // Generate unique project ID
+      projectId = `project_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Create project data for localStorage
+      const projectData = {
+        id: projectId,
+        title: formData.title,
+        description: formData.description,
+        longDescription: formData.longDescription,
+        creatorId: user.id || user.walletAddress || 'anonymous',
+        creatorName: user.email || 'Anonymous',
+        category: formData.category,
+        tags: formData.tags,
+        demoUrl: formData.demoUrl,
+        videoUrl: formData.videoUrl,
+        imageHashes,
+        fundingGoal: formData.fundingGoal,
+        currentFunding: 0,
+        deadline: formData.deadline,
+        teamSize: formData.teamSize,
+        technologies: formData.technologies,
+        features: formData.features,
+        roadmap: formData.roadmap,
+        fundingTiers: formData.fundingTiers,
+        milestones: formData.milestones,
+        ipfsHash: metadataResult.ipfsHash,
+        blockchainRecord: undefined, // Will be updated after blockchain registration
+        status: 'active' as const
+      };
+
+      // Save project
+      toast.loading('Creating project...');
+      
+      const savedProject = localStorageService.saveProject(projectData);
+      toast.dismiss();
+
+      if (!savedProject) {
+        throw new Error('Failed to create project');
+      }
+
+      // Register project on blockchain
+      let blockchainResult = null;
+      try {
+        toast.loading('Finalizing project...');
+
+        // Use real contracts if enabled, otherwise use mock
+        if (process.env.REACT_APP_ENABLE_REAL_CONTRACTS === 'true') {
+          // Use real smart contracts
+          await advancedContractService.initialize();
+          
+          const deadline = Math.floor(new Date(formData.deadline).getTime() / 1000); // Unix timestamp
+          const goalAmountStr = formData.fundingGoal?.toString() || '1'; // Default to 1 ETH if not set
+          
+          const tx = await advancedContractService.createCampaign(
+            CampaignType.PROJECT,
+            formData.title,
+            formData.description,
+            metadataResult.ipfsHash,
+            goalAmountStr,
+            deadline,
+            [], // milestone descriptions (empty for now)
+            [], // milestone funds (empty for now)  
+            [] // milestone deadlines (empty for now)
+          );
+
+          // Wait for transaction to be mined
+          const receipt = await tx.wait();
+          
+          blockchainResult = {
+            txHash: receipt?.hash || '',
+            blockNumber: receipt?.blockNumber || 0,
+            gasUsed: receipt?.gasUsed?.toString() || '0',
+            gasPrice: '0'
+          };
+        } else {
+          // Use mock blockchain service
+          blockchainResult = await mockBlockchainService.registerProject({
+            id: projectId,
+            title: formData.title,
+            description: formData.description,
+            author: user.walletAddress || '',
+            timestamp: new Date().toISOString(),
+            category: formData.category,
+            tags: formData.tags
+          });
+        }
+        toast.dismiss();
+
+        if (blockchainResult && blockchainResult.txHash) {
+
+          
+          // Update project with blockchain transaction hash in localStorage
+          const blockchainRecord = {
+            txHash: blockchainResult.txHash,
+            blockNumber: blockchainResult.blockNumber || 0,
+            timestamp: new Date().toISOString(),
+            verified: true
+          };
+          
+          const updateResult = localStorageService.updateProject(projectId, { blockchainRecord });
+          if (updateResult) {
+            toast.success('🎉 Project created successfully!');
+          } else {
+            toast.success('🎉 Project created successfully!');
+          }
+        } else {
+          toast.success('🎉 Project created successfully!');
+        }
+      } catch (blockchainError: any) {
+        console.error('Blockchain registration failed:', blockchainError);
+        toast.success('🎉 Project created successfully!');
+      }
+
+      // Redirect to projects page
+      setTimeout(() => {
+        navigate('/projects');
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Project creation error:', error);
+      
+      // Enhanced error reporting
+      const errorMessage = error.message || 'Failed to create project. Please try again.';
+      const errorDetails = {
+        error: error,
+        formData: {
+          title: formData.title,
+          category: formData.category,
+          hasImages: formData.images.length > 0,
+          hasUser: !!user
+        },
+        projectId,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.error('Detailed error information:', errorDetails);
+      toast.error(`❌ ${errorMessage}`);
+      
+      // Show additional help for common errors
+      if (errorMessage.includes('MetaMask')) {
+        toast.error('💡 Make sure MetaMask is installed and connected');
+      } else if (errorMessage.includes('IPFS')) {
+        toast.error('💡 IPFS upload failed - check your internet connection');
+      } else if (errorMessage.includes('localStorage')) {
+        toast.error('💡 Local storage issue - try clearing browser data');
+      }
+      
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const nextStep = () => {
+    // Validate required fields for each step
+    if (currentStep === 1) {
+      if (!formData.title || !formData.description || !formData.category) {
+        toast.error('Please fill in all required fields: Title, Description, and Category');
+        return;
+      }
+    } else if (currentStep === 4) {
+      if (!formData.fundingGoal || !formData.deadline) {
+        toast.error('Please fill in all required fields: Funding Goal and Deadline');
+        return;
+      }
+    }
+
     if (currentStep < steps.length) {
       setCurrentStep(currentStep + 1);
     }
@@ -199,6 +488,20 @@ const CreateProjectPage: React.FC = () => {
     }
   };
 
+  const isFieldValid = (fieldName: string): boolean => {
+    const value = formData[fieldName as keyof ProjectFormData];
+    return value !== '' && value !== null && value !== undefined && 
+           (typeof value !== 'number' || value > 0);
+  };
+
+  const getFieldClassName = (fieldName: string, baseClassName: string): string => {
+    const requiredFields = ['title', 'description', 'longDescription', 'category', 'fundingGoal', 'deadline'];
+    if (requiredFields.includes(fieldName) && !isFieldValid(fieldName)) {
+      return `${baseClassName} border-red-500 focus:border-red-500 focus:ring-red-500`;
+    }
+    return baseClassName;
+  };
+
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
@@ -206,51 +509,51 @@ const CreateProjectPage: React.FC = () => {
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Project Title *
+                Project Title <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={formData.title}
                 onChange={(e) => updateFormData('title', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                className={getFieldClassName('title', "w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white")}
                 placeholder="Enter your project title..."
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Short Description *
+                Short Description <span className="text-red-500">*</span>
               </label>
               <textarea
                 value={formData.description}
                 onChange={(e) => updateFormData('description', e.target.value)}
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none"
+                className={getFieldClassName('description', "w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none")}
                 placeholder="Brief description of your project..."
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Detailed Description *
+                Detailed Description <span className="text-red-500">*</span>
               </label>
               <textarea
                 value={formData.longDescription}
                 onChange={(e) => updateFormData('longDescription', e.target.value)}
                 rows={8}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none"
+                className={getFieldClassName('longDescription', "w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none")}
                 placeholder="Detailed description, goals, and vision for your project..."
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Category *
+                Category <span className="text-red-500">*</span>
               </label>
               <select
                 value={formData.category}
                 onChange={(e) => updateFormData('category', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                className={getFieldClassName('category', "w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white")}
               >
                 <option value="">Select a category</option>
                 {categories.map(category => (
@@ -338,13 +641,43 @@ const CreateProjectPage: React.FC = () => {
                 <PhotoIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600 dark:text-gray-400 mb-2">Upload project images</p>
                 <p className="text-sm text-gray-500 dark:text-gray-500">PNG, JPG up to 10MB each</p>
-                <button
-                  type="button"
-                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  id="image-upload"
+                />
+                <label
+                  htmlFor="image-upload"
+                  className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
                 >
                   Choose Files
-                </button>
+                </label>
               </div>
+              
+              {/* Image Previews */}
+              {formData.imageUrls.length > 0 && (
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {formData.imageUrls.map((url, index) => (
+                    <div key={index} className="relative">
+                      <img
+                        src={url}
+                        alt={`Preview ${index + 1}`}
+                        className="w-full h-24 object-cover rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(index)}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                      >
+                        <XMarkIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         );
@@ -435,6 +768,70 @@ const CreateProjectPage: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Project Milestones (for funding)
+                </label>
+                <button
+                  type="button"
+                  onClick={addMilestone}
+                  className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                >
+                  Add Milestone
+                </button>
+              </div>
+              <div className="space-y-4">
+                {formData.milestones.map(milestone => (
+                  <div key={milestone.id} className="p-4 border border-gray-300 dark:border-gray-600 rounded-lg">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                      <input
+                        type="text"
+                        value={milestone.title}
+                        onChange={(e) => updateMilestone(milestone.id, 'title', e.target.value)}
+                        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                        placeholder="Milestone title..."
+                      />
+                      <div className="flex space-x-2">
+                        <input
+                          type="number"
+                          value={milestone.targetAmount}
+                          onChange={(e) => updateMilestone(milestone.id, 'targetAmount', parseFloat(e.target.value))}
+                          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                          placeholder="Target amount..."
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeMilestone(milestone.id)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <XMarkIcon className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                    <textarea
+                      value={milestone.description}
+                      onChange={(e) => updateMilestone(milestone.id, 'description', e.target.value)}
+                      rows={2}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white mb-3 resize-none"
+                      placeholder="Milestone description..."
+                    />
+                    <input
+                      type="date"
+                      value={milestone.deadline}
+                      onChange={(e) => updateMilestone(milestone.id, 'deadline', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    />
+                  </div>
+                ))}
+              </div>
+              {formData.milestones.length === 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                  Add milestones to enable milestone-based funding and verification
+                </p>
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Project Roadmap
                 </label>
                 <button
@@ -491,26 +888,26 @@ const CreateProjectPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Funding Goal (USD)
+                  Funding Goal (USD) <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
                   value={formData.fundingGoal}
                   onChange={(e) => updateFormData('fundingGoal', parseFloat(e.target.value))}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  className={getFieldClassName('fundingGoal', "w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white")}
                   placeholder="50000"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Funding Deadline
+                  Funding Deadline <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
                   value={formData.deadline}
                   onChange={(e) => updateFormData('deadline', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  className={getFieldClassName('deadline', "w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white")}
                 />
               </div>
             </div>
@@ -617,6 +1014,7 @@ const CreateProjectPage: React.FC = () => {
                   <p className="text-sm text-gray-600 dark:text-gray-400">Technologies: {formData.technologies.length ? formData.technologies.join(', ') : 'None'}</p>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Features: {formData.features.length} features</p>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Roadmap: {formData.roadmap.length} milestones</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Funding Milestones: {formData.milestones.length}</p>
                 </div>
               </div>
 
@@ -633,6 +1031,7 @@ const CreateProjectPage: React.FC = () => {
                   <h4 className="font-semibold text-gray-900 dark:text-white">Media</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Demo URL: {formData.demoUrl || 'Not provided'}</p>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Video URL: {formData.videoUrl || 'Not provided'}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Images: {formData.images.length} uploaded</p>
                 </div>
               </div>
             </div>
@@ -720,9 +1119,17 @@ const CreateProjectPage: React.FC = () => {
           exit={{ opacity: 0, x: -20 }}
           className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-xl border border-gray-200 dark:border-gray-700"
         >
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
             {steps[currentStep - 1].title}
           </h2>
+          
+          {/* Required Fields Notice */}
+          <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <p className="text-sm text-blue-800 dark:text-blue-200 flex items-center">
+              <span className="text-red-500 mr-1">*</span>
+              Required fields are marked with a red asterisk
+            </p>
+          </div>
 
           {renderStepContent()}
 
