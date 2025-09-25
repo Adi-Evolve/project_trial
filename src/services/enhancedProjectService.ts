@@ -20,11 +20,13 @@ export interface ProjectSupabaseData {
   ipfs_hash?: string;
   blockchain_id?: string; // <-- Added for blockchain project ID
   image_url?: string;
+  image_urls?: string[];
   video_url?: string;
   website_url?: string;
   github_url?: string;
   whitepaper_url?: string;
   roadmap: any[];
+  milestones?: any[];
   team_members: any[];
   featured: boolean;
   total_backers: number;
@@ -36,6 +38,28 @@ export interface ProjectSupabaseData {
 }
 
 class EnhancedProjectService {
+
+  // Check whether a specific column exists on a table (used to guard writes before migration)
+  private async columnExists(tableName: string, columnName: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('information_schema.columns')
+        .select('column_name')
+        .eq('table_name', tableName)
+        .eq('column_name', columnName)
+        .limit(1);
+
+      if (error) {
+        console.warn('Could not check column existence for', tableName, columnName, error.message || error);
+        return false;
+      }
+
+      return Array.isArray(data) && data.length > 0;
+    } catch (err) {
+      console.warn('Error checking column existence:', err);
+      return false;
+    }
+  }
   
   // Save project to both localStorage and Supabase with proper schema mapping
   async saveProject(projectData: Omit<StoredProject, 'id' | 'createdAt' | 'updatedAt' | 'views' | 'likes' | 'supporters' | 'comments'>): Promise<{
@@ -134,6 +158,10 @@ class EnhancedProjectService {
           image_url: project.imageHashes && project.imageHashes.length > 0
             ? `https://gateway.pinata.cloud/ipfs/${project.imageHashes[0]}`
             : undefined,
+          // image_urls: only include if DB column exists (migration may not have run yet)
+          ...(await this.columnExists('projects', 'image_urls') ? {
+            image_urls: project.imageUrls || (project.imageHashes ? project.imageHashes.map(h => `https://gateway.pinata.cloud/ipfs/${h}`) : [])
+          } : {}),
           video_url: project.videoUrl,
           website_url: project.demoUrl,
           roadmap: project.roadmap || [],
@@ -185,6 +213,10 @@ class EnhancedProjectService {
           image_url: project.imageHashes && project.imageHashes.length > 0
             ? `https://gateway.pinata.cloud/ipfs/${project.imageHashes[0]}`
             : undefined,
+          ...(await this.columnExists('projects', 'image_urls') ? {
+            image_urls: project.imageUrls || (project.imageHashes ? project.imageHashes.map(h => `https://gateway.pinata.cloud/ipfs/${h}`) : [])
+          } : {}),
+          milestones: project.milestones || [],
           video_url: project.videoUrl,
           website_url: project.demoUrl,
           roadmap: project.roadmap || [],
@@ -292,18 +324,29 @@ class EnhancedProjectService {
         return localProject;
       }
 
-      // Try Supabase with correct ID field
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('id', projectId)
-        .single();
+      // Try Supabase with several possible ID fields (uuid id, blockchain_id, title)
+      let data: any = null;
+      let error: any = null;
+
+      // 1) Try UUID primary id
+      ({ data, error } = await supabase.from('projects').select('*').eq('id', projectId).single());
+
+      // 2) If not found, try blockchain_id
+      if ((!data || Object.keys(data).length === 0) && !error) {
+        ({ data, error } = await supabase.from('projects').select('*').eq('blockchain_id', projectId).single());
+      }
+
+      // 3) If still not found, try title (case-insensitive)
+      if ((!data || Object.keys(data).length === 0) && !error) {
+        ({ data, error } = await supabase.from('projects').select('*').ilike('title', projectId).single());
+      }
 
       if (error) {
         if (error.code === 'PGRST116') {
           console.log('ℹ️ Project not found in Supabase');
           return null;
         }
+        console.error('Supabase error fetching project:', error);
         throw new Error(`Database error: ${error.message}`);
       }
 
@@ -337,6 +380,8 @@ class EnhancedProjectService {
         demoUrl: data.website_url,
         videoUrl: data.video_url,
         imageHashes: data.image_url ? [data.image_url] : [],
+        imageUrls: data.image_urls || [],
+        blockchainId: data.blockchain_id || undefined,
         ipfsHash: data.ipfs_hash,
         blockchainTxHash: data.blockchain_tx_hash,
         blockchainRecord: data.blockchain_tx_hash ? {
@@ -442,7 +487,18 @@ class EnhancedProjectService {
       if (updates.tags) supabaseUpdates.tags = updates.tags;
       if (updates.demoUrl) supabaseUpdates.website_url = updates.demoUrl;
       if (updates.videoUrl) supabaseUpdates.video_url = updates.videoUrl;
-      if (updates.imageHashes && updates.imageHashes.length > 0) supabaseUpdates.image_url = updates.imageHashes[0];
+  if (updates.imageHashes && updates.imageHashes.length > 0) supabaseUpdates.image_url = updates.imageHashes[0];
+  // Persist imgbb / CDN URLs to image_urls (text[]) if column exists
+  if (updates.imageUrls && updates.imageUrls.length > 0) {
+    if (await this.columnExists('projects', 'image_urls')) {
+      supabaseUpdates.image_urls = updates.imageUrls;
+    } else {
+      console.warn('Skipping image_urls update because column does not exist yet');
+    }
+  }
+  // Persist milestones (JSON/JSONB)
+  if (updates.milestones) supabaseUpdates.roadmap = updates.milestones; // keep roadmap for compatibility
+  if (updates.milestones) supabaseUpdates.milestones = updates.milestones as any;
       if (updates.fundingGoal) supabaseUpdates.funding_goal = updates.fundingGoal;
       if (updates.currentFunding !== undefined) supabaseUpdates.current_funding = updates.currentFunding;
       if (updates.deadline) supabaseUpdates.deadline = updates.deadline;

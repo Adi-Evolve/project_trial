@@ -19,6 +19,7 @@ import { contributionsService } from '../services/contributionsService';
 import { useAuth } from '../context/AuthContext';
 import { localStorageService } from '../services/localStorage';
 import { userRegistrationService } from '../services/userRegistration';
+import { enhancedProjectService } from '../services/enhancedProjectService';
 
 interface FundingTier {
   id: string;
@@ -71,9 +72,15 @@ const ProjectFundingPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // Load blockchain project data
-      const blockchainData = await web3Service.getProject(id);
-      setBlockchainProject(blockchainData);
+      // Load project from enhanced service (tries localStorage then Supabase)
+      const storedProject = await enhancedProjectService.getProjectById(id);
+
+      // If project exists and has a blockchainId, fetch on-chain data
+      let blockchainData: BlockchainProjectData | null = null;
+      if (storedProject && storedProject.blockchainId) {
+        blockchainData = await web3Service.getProject(storedProject.blockchainId);
+        setBlockchainProject(blockchainData);
+      }
 
       // Load donations
       const contributionsResult = await contributionsService.getProjectContributions(id);
@@ -81,9 +88,6 @@ const ProjectFundingPage: React.FC = () => {
         setDonations(contributionsResult.contributions || []);
       }
 
-      // Load actual project data from localStorage
-      const storedProject = localStorageService.getProjectById(id);
-      
       if (!storedProject) {
         setError('Project not found');
         setIsLoading(false);
@@ -104,14 +108,16 @@ const ProjectFundingPage: React.FC = () => {
           email: creatorDetails?.email || 'creator@project.com'
         },
         funding: {
-          goal: blockchainData?.targetAmount || storedProject.fundingGoal.toString(),
-          raised: blockchainData?.raisedAmount || storedProject.currentFunding.toString(),
+    goal: blockchainData?.targetAmount || storedProject.fundingGoal.toString(),
+    raised: blockchainData?.raisedAmount || storedProject.currentFunding.toString(),
           backers: donations.length,
           deadline: new Date(storedProject.deadline)
         },
-        banner: storedProject.imageHashes && storedProject.imageHashes.length > 0 
-          ? `https://gateway.pinata.cloud/ipfs/${storedProject.imageHashes[0]}`
-          : 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&h=400&fit=crop',
+        banner: (storedProject.imageUrls && storedProject.imageUrls.length > 0)
+          ? storedProject.imageUrls[0]
+          : (storedProject.imageHashes && storedProject.imageHashes.length > 0)
+            ? `https://gateway.pinata.cloud/ipfs/${storedProject.imageHashes[0]}`
+            : 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&h=400&fit=crop',
         category: storedProject.category || 'Technology',
         status: storedProject.status as 'active' | 'inactive' | 'completed' | 'cancelled'
       };

@@ -102,26 +102,75 @@ const ProjectsPage: React.FC = () => {
       setLoading(true);
 
       // Load projects from Supabase
-      const { data: projectsData, error } = await supabase
-        .from('projects')
-        .select(`
-          *,
-          users:creator_id (
-            id,
-            username,
-            avatar_url
-          )
-        `)
-        .order('created_at', { ascending: false });
+      // Try to load projects with embedded creator user (requires FK relationship projects.creator_id -> users.id)
+      let projectsData: any = null;
+      let error: any = null;
 
+      try {
+        const res = await supabase
+          .from('projects')
+          .select(`
+            *,
+            users:creator_id (
+              id,
+              username,
+              avatar_url
+            )
+          `)
+          .order('created_at', { ascending: false });
+
+        projectsData = res.data;
+        error = res.error;
+      } catch (err) {
+        // PostgREST may throw for missing FK relationships; handle below
+        error = err;
+      }
+
+      // If the join failed because the DB doesn't have the FK relationship, fall back to separate queries
       if (error) {
-        console.error('Error loading projects:', error);
-        toast.error('Failed to load projects');
-        return;
+        console.warn('Projects join failed, falling back to separate queries:', error);
+
+        // Fetch projects without the embedded users
+        const { data: basicProjects, error: basicError } = await supabase
+          .from('projects')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (basicError) {
+          console.error('Error loading projects (basic fetch):', basicError);
+          toast.error('Failed to load projects');
+          return;
+        }
+
+        // Batch-fetch user profiles for the creator_ids we found
+        const creatorIds = Array.from(new Set((basicProjects || []).map((p: any) => p.creator_id).filter(Boolean)));
+        let usersById: Record<string, any> = {};
+
+        if (creatorIds.length > 0) {
+          const { data: usersData, error: usersError } = await supabase
+            .from('users')
+            .select('id,username,avatar_url')
+            .in('id', creatorIds as any[]);
+
+          if (!usersError && usersData) {
+            usersById = (usersData as any[]).reduce((acc, u) => {
+              acc[u.id] = u;
+              return acc;
+            }, {} as Record<string, any>);
+          } else {
+            console.warn('Failed to fetch creator profiles for projects:', usersError);
+          }
+        }
+
+        // Attach user info to each project record so the rest of the UI can work unchanged
+        projectsData = (basicProjects || []).map((project: any) => ({
+          ...project,
+          users: usersById[project.creator_id] || null
+        }));
       }
 
       // Transform the data to match our Project interface
-      const transformedProjects: Project[] = (projectsData || []).map((project: any) => {
+          const transformedProjects: Project[] = (projectsData || []).map((project: any) => {
         return {
           id: project.id,
           title: project.title,
@@ -149,7 +198,7 @@ const ProjectsPage: React.FC = () => {
             avatar: project.users?.avatar_url || '',
             verified: false // Could be enhanced with verification system
           },
-          images: project.images || [],
+          images: project.image_urls || (project.image_url ? [project.image_url] : (project.image_hashes ? project.image_hashes.map((h: string) => `https://gateway.pinata.cloud/ipfs/${h}`) : [])),
           blockchainRecord: project.blockchain_record ? {
             txHash: project.blockchain_record.tx_hash,
             verified: project.blockchain_record.verified || true,

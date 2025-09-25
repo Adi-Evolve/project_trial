@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import { StoredProject, localStorageService } from '../services/localStorage';
+import { enhancedProjectService } from '../services/enhancedProjectService';
 import ContributionsDisplay from '../components/funding/ContributionsDisplay';
 import { EscrowManagement } from '../components/escrow/EscrowManagement';
 import {
@@ -46,7 +47,15 @@ const ProjectDetailsPage: React.FC = () => {
       }
       
       try {
-        const data = await localStorageService.getProjectById(projectId);
+        // Try localStorage first
+        let data = await localStorageService.getProjectById(projectId);
+
+        // If not found, try enhanced service which will query Supabase (by id or title fallback)
+        if (!data) {
+          const fetched = await enhancedProjectService.getProjectById(projectId);
+          if (fetched) data = fetched;
+        }
+
         setProject(data);
       } catch (error) {
         console.error(error);
@@ -130,9 +139,11 @@ const ProjectDetailsPage: React.FC = () => {
   const fundingProgress = project.fundingGoal > 0 ? (project.currentFunding / project.fundingGoal) * 100 : 0;
   const daysLeft = Math.ceil((new Date(project.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
   
-  const projectImage = project.imageHashes && project.imageHashes.length > 0 
-    ? `https://gateway.pinata.cloud/ipfs/${project.imageHashes[0]}`
-    : 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&h=400&fit=crop';
+  const projectImage = (project.imageUrls && project.imageUrls.length > 0)
+    ? project.imageUrls[0]
+    : (project.imageHashes && project.imageHashes.length > 0
+      ? `https://gateway.pinata.cloud/ipfs/${project.imageHashes[0]}`
+      : 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&h=400&fit=crop');
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LightBulbIcon },

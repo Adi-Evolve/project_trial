@@ -11,6 +11,9 @@ import { web3Service, ProjectData } from '../../services/web3';
 import { contributionsService } from '../../services/contributionsService';
 import { transactionMonitorService } from '../../services/transactionMonitorService';
 import { localStorageService } from '../../services/localStorage';
+import { enhancedProjectService } from '../../services/enhancedProjectService';
+import { supabase } from '../../services/supabase';
+import { escrowService } from '../../services/escrowService';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
 
@@ -57,6 +60,7 @@ const DonationWidget: React.FC<DonationWidgetProps> = ({
   });
 
   const [projectData, setProjectData] = useState<ProjectData | null>(null);
+  const [isZkpOptIn, setIsZkpOptIn] = useState<boolean>(false);
 
   useEffect(() => {
     checkWalletConnection();
@@ -162,71 +166,262 @@ const DonationWidget: React.FC<DonationWidgetProps> = ({
       }
 
       console.log('🔄 Starting donation process:', {
-        projectId,
-        amount: formData.amount,
-        userId: user.id
-      });
-
-      // First, check if project exists on blockchain, if not create it
-      console.log('🔍 Checking if project exists on blockchain...');
-      let projectExists = await web3Service.getProject(projectId);
-      
-      if (!projectExists) {
-        console.log('📝 Project not found on blockchain, creating it first...');
-        
-        // Get project data from local storage to create on blockchain
-        const localProject = await localStorageService.getProjectById(projectId);
-        if (!localProject) {
-          throw new Error('Project not found in local storage');
-        }
-
-        // Convert funding goal to ETH (ensure it's a string)
-        const targetAmountEth = localProject.fundingGoal?.toString() || '1.0';
-        
-        // Set deadline (default to 30 days from now if not specified)
-        let deadline = new Date();
-        if (localProject.deadline) {
-          deadline = new Date(localProject.deadline);
-        } else {
-          deadline.setDate(deadline.getDate() + 30); // 30 days from now
-        }
-
-        console.log('🚀 Creating project on blockchain:', {
           projectId,
-          targetAmount: targetAmountEth + ' ETH',
-          deadline: deadline.toISOString()
+          amount: formData.amount,
+          userId: user.id
         });
 
-        const createResult = await web3Service.createProject(
-          projectId,
-          targetAmountEth,
-          deadline
-        );
+      // First, check if project exists on blockchain, if not try to resolve/create it
+  console.log('🔍 Checking if project exists on blockchain...');
+  // onChainProjectId is the identifier used by the smart contract. Default to the provided projectId
+  // but prefer any resolved blockchain identifier from Supabase/local data.
+  let onChainProjectId = projectId;
+  let projectExists = await web3Service.getProject(onChainProjectId);
 
-        if (!createResult.success) {
-          throw new Error(`Failed to create project on blockchain: ${createResult.error}`);
+      // If not found on-chain, try to resolve a proper blockchain identifier from Supabase/local storage
+      if (!projectExists) {
+        console.log('⚠️ Project not found on blockchain. Attempting enhanced lookup...');
+
+        const enhanced = await enhancedProjectService.getProjectById(projectId).catch(() => null);
+        if (enhanced && enhanced.blockchainId) {
+          console.log('🔁 Resolved blockchainId from Supabase/local:', enhanced.blockchainId);
+          onChainProjectId = enhanced.blockchainId;
+          projectExists = await web3Service.getProject(onChainProjectId);
         }
 
-        console.log('✅ Project created on blockchain:', createResult.transactionHash);
-        
-        // Wait a moment for the transaction to be mined
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Verify project was created
-        projectExists = await web3Service.getProject(projectId);
+        // If still not found, attempt to create using localProject metadata as a last resort (preserves previous behavior)
         if (!projectExists) {
-          throw new Error('Project creation verification failed');
+          console.log('📝 Falling back to creating project on-chain from local metadata...');
+          const localProject = await localStorageService.getProjectById(projectId);
+          if (!localProject) {
+            throw new Error('Project not found in local storage or Supabase; cannot create on-chain project');
+          }
+
+          // Convert funding goal to ETH (ensure it's a string)
+          const targetAmountEth = localProject.fundingGoal?.toString() || '1.0';
+
+          // Set deadline (default to 30 days from now if not specified)
+          let deadline = new Date();
+          if (localProject.deadline) {
+            deadline = new Date(localProject.deadline);
+          } else {
+            deadline.setDate(deadline.getDate() + 30); // 30 days from now
+          }
+
+          console.log('🚀 Creating project on blockchain (fallback):', {
+            projectId,
+            targetAmount: targetAmountEth + ' ETH',
+            deadline: deadline.toISOString()
+          });
+
+          // Use onChainProjectId for creation to ensure the contract registers the expected id
+          const createResult = await web3Service.createProject(
+            onChainProjectId,
+            targetAmountEth,
+            deadline
+          );
+
+          if (!createResult.success) {
+            throw new Error(`Failed to create project on blockchain: ${createResult.error}`);
+          }
+
+          console.log('✅ Project created on blockchain (fallback):', createResult.transactionHash);
+
+          // Wait a moment for the transaction to be mined
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          // Verify project was created
+          projectExists = await web3Service.getProject(onChainProjectId);
+          if (!projectExists) {
+            throw new Error('Project creation verification failed for onChainProjectId: ' + onChainProjectId);
+          }
+          if (!projectExists) {
+            throw new Error('Project creation verification failed');
+          }
         }
       } else {
         console.log('✅ Project already exists on blockchain');
       }
 
-      // Process blockchain donation transaction
-      const result = await web3Service.donate(
-        projectId,
+      // Determine whether project uses milestones (escrow) or should be direct payout
+      console.log('🔁 Final donate call IDs:', { dbProjectId: projectId, onChainProjectId });
+      let result: { success: boolean; transactionHash?: string; error?: string } | null = null;
+
+      // Check for milestones via enhancedProjectService (falls back to DB). If none, do direct transfer to creator
+      let doDirectPayout = false;
+      let creatorWalletAddress: string | undefined;
+      try {
+        const enhanced = await enhancedProjectService.getProjectById(projectId);
+        if (enhanced) {
+          // If enhanced project has explicit milestones array, respect that
+          const milestones = enhanced.milestones || [];
+          if (Array.isArray(milestones) && milestones.length === 0) {
+            doDirectPayout = true;
+          }
+          creatorWalletAddress = (enhanced as any).creatorAddress || undefined;
+        }
+      } catch (err) {
+        console.warn('Could not determine project milestones from enhanced service, falling back to escrowService');
+      }
+
+      // If we couldn't determine from enhancedProjectService, try escrowService.getProjectMilestones
+      if (!doDirectPayout) {
+        try {
+          const milestonesResult = await escrowService.getProjectMilestones(projectId);
+          if (milestonesResult.success && Array.isArray(milestonesResult.milestones) && milestonesResult.milestones.length === 0) {
+            doDirectPayout = true;
+          }
+        } catch (err) {
+          console.warn('Could not check milestones via escrowService:', err);
+        }
+      }
+
+      if (doDirectPayout) {
+        console.log('➡️ Project has zero milestones — performing direct payout to creator');
+
+
+        // Resolve creator wallet address if missing.
+        // Prefer the explicit projects.creator_wallet_address column (present in migrations).
+        if (!creatorWalletAddress) {
+          try {
+            const { data: projectRow, error: projErr } = await supabase
+              .from('projects')
+              .select('id, creator_id, creator_wallet_address, blockchain_id')
+              .or(`id.eq.${projectId},blockchain_id.eq.${projectId}`)
+              .limit(1)
+              .single();
+
+            if (!projErr && projectRow) {
+              // Use the explicit creator_wallet_address if present
+              if (projectRow.creator_wallet_address && web3Service.isValidAddress(projectRow.creator_wallet_address)) {
+                creatorWalletAddress = projectRow.creator_wallet_address;
+              } else if (projectRow.creator_id) {
+                const creatorIdVal = projectRow.creator_id as string;
+                // If creator_id already contains a wallet address, accept it
+                if (creatorIdVal && web3Service.isValidAddress(creatorIdVal)) {
+                  creatorWalletAddress = creatorIdVal;
+                } else if (creatorIdVal && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(creatorIdVal)) {
+                  // Lookup user by UUID to get wallet_address
+                  const { data: userRow } = await supabase
+                    .from('users')
+                    .select('wallet_address')
+                    .eq('id', creatorIdVal)
+                    .single();
+                  creatorWalletAddress = userRow?.wallet_address;
+                } else {
+                  // As a last resort, attempt to find a user with this string as wallet_address
+                  const { data: userRow } = await supabase
+                    .from('users')
+                    .select('wallet_address')
+                    .eq('wallet_address', creatorIdVal)
+                    .single();
+                  creatorWalletAddress = userRow?.wallet_address;
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('Failed to resolve creator wallet address from Supabase/enhancedProjectService:', err);
+          }
+        }
+
+        if (!creatorWalletAddress || !web3Service.isValidAddress(creatorWalletAddress)) {
+          throw new Error('Creator wallet address not available or invalid; cannot perform direct payout');
+        }
+
+        // Perform direct ETH transfer from donor to creator
+        result = await web3Service.sendDirectTransfer(creatorWalletAddress, formData.amount);
+
+        if (!result.success) {
+          throw new Error(result.error || 'Direct payout transaction failed');
+        }
+
+        // Save contribution as confirmed (skip escrow pending flow)
+        if (result.transactionHash) {
+          console.log('✅ Direct payout transaction successful:', result.transactionHash);
+
+          // Attempt to insert contribution with status = 'confirmed' so totals update immediately
+          try {
+            const { data: contribData, error: insertErr } = await supabase
+              .from('contributions')
+              .insert([{ 
+                project_id: projectId,
+                contributor_id: user.id || null,
+                amount: parseFloat(formData.amount),
+                currency: 'ETH',
+                blockchain_tx_hash: result.transactionHash,
+                status: 'confirmed',
+                contribution_message: formData.message || undefined,
+                is_anonymous: false,
+                is_zkp: isZkpOptIn || false,
+                created_at: new Date().toISOString(),
+                confirmed_at: new Date().toISOString()
+              }])
+              .select()
+              .single();
+
+            if (insertErr) {
+              console.warn('Direct payout: supabase insert returned error, falling back to contributionsService:', insertErr.message || insertErr);
+              const contributionResult = await contributionsService.processContribution(
+                projectId,
+                user.id!,
+                parseFloat(formData.amount),
+                'ETH',
+                result.transactionHash,
+                formData.message || undefined,
+                false,
+                isZkpOptIn
+              );
+              if (!contributionResult.success) {
+                console.error('Failed saving contribution after direct payout:', contributionResult.error);
+                toast.error('Donation succeeded but failed to record contribution in database');
+              }
+            } else {
+              console.log('✅ Contribution recorded as confirmed in DB (direct payout)');
+            }
+
+          } catch (err) {
+            console.warn('Error saving contribution record after direct payout:', err);
+          }
+
+          // Monitor the transaction
+          transactionMonitorService.startMonitoring(result.transactionHash);
+
+          setTransactionHash(result.transactionHash);
+          setStep('success');
+          if (onDonationSuccess) onDonationSuccess(result.transactionHash, formData.amount);
+          await loadProjectData();
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Process blockchain donation transaction (escrow path)
+      // Donate using the on-chain id (may be different from DB UUID)
+      // Try donate using the resolved on-chain id first
+      result = await web3Service.donate(
+        onChainProjectId,
         formData.amount,
         formData.message
       );
+
+      // If the call failed due to project not found and we used a different id than the DB id,
+      // retry once with the DB projectId (handles mismatches where the contract was created with the DB UUID instead)
+      if (!result.success && result.error && onChainProjectId !== projectId) {
+        const errLower = (result.error || '').toLowerCase();
+        if (errLower.includes('project') || errLower.includes('not exist') || errLower.includes('project_not_found')) {
+          console.warn('⚠️ Donate failed for onChainProjectId, retrying with DB projectId:', { onChainProjectId, projectId, error: result.error });
+          result = await web3Service.donate(
+            projectId,
+            formData.amount,
+            formData.message
+          );
+          if (result.success) {
+            console.log('✅ Donate succeeded on retry with DB projectId');
+          } else {
+            console.error('❌ Donate also failed on retry with DB projectId:', result.error);
+          }
+        }
+      }
 
       if (result.success && result.transactionHash) {
         console.log('✅ Blockchain transaction successful:', result.transactionHash);
@@ -250,7 +445,8 @@ const DonationWidget: React.FC<DonationWidgetProps> = ({
           'ETH',
           result.transactionHash,
           formData.message || undefined,
-          false // Not anonymous
+          false, // Not anonymous
+          isZkpOptIn // pass user's ZKP opt-in preference
         );
 
         console.log('📈 Contribution service result:', contributionResult);
@@ -456,6 +652,19 @@ const DonationWidget: React.FC<DonationWidgetProps> = ({
                          bg-white dark:bg-gray-700 text-gray-900 dark:text-white
                          focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="zkp-optin"
+                type="checkbox"
+                checked={isZkpOptIn}
+                onChange={(e) => setIsZkpOptIn(e.target.checked)}
+                className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+              />
+              <label htmlFor="zkp-optin" className="text-sm text-gray-700 dark:text-gray-300">
+                Opt-in to ZKP privacy for this contribution (store minimal personal info)
+              </label>
             </div>
 
             <div>

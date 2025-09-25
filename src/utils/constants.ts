@@ -163,6 +163,27 @@ export const NOTIFICATION_TYPES = [
   { value: 'system_announcement', label: 'System Announcement', icon: '📢' },
 ] as const;
 
+export const DEPLOYED_CONTRACTS = {
+  // Sepolia Testnet Contract Addresses
+  DECENTRALIZED_ORACLE: '0x912b6265AFD7Ed9Cbc3FaEFDC419a3EC108De39A',
+  CROWDFUNDING_PLATFORM: '0x21C3d838E291cD83CeC6D0f52AB2D2b3A19CBc27',
+  CHAINLINK_ETH_USD_PRICE_FEED: '0x694AA1769357215DE4FAC081bf1f309aDC325306', // Sepolia testnet
+} as const;
+
+export const NETWORK_CONFIG = {
+  SEPOLIA: {
+    chainId: 11155111,
+    name: 'Sepolia',
+    rpcUrl: 'https://sepolia.infura.io/v3/YOUR_INFURA_KEY',
+    blockExplorerUrl: 'https://sepolia.etherscan.io',
+    nativeCurrency: {
+      name: 'SepoliaETH',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+  },
+} as const;
+
 export const APP_CONFIG = {
   name: 'ProjectForge',
   tagline: 'Where Ideas Meet Innovation',

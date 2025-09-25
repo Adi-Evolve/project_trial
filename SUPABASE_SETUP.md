@@ -118,3 +118,53 @@ If you encounter issues:
 4. Verify your network connection and firewall settings
 
 The system is designed to gracefully handle failures and provide clear error messages to users.
+
+---
+
+## Project Milestone Verification Setup
+
+### Add milestone_check Column to Projects Table
+
+In Supabase SQL Editor, run the following SQL to add the milestone verification column:
+
+```sql
+-- Add milestone_check column to projects table
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS milestone_check boolean DEFAULT false;
+
+-- Add comment for documentation
+COMMENT ON COLUMN projects.milestone_check IS 'Oracle verification status: false on creation/new milestone, true after oracle verification';
+
+-- Update existing projects to have milestone_check = false
+UPDATE projects SET milestone_check = false WHERE milestone_check IS NULL;
+
+-- Create index for faster queries
+CREATE INDEX IF NOT EXISTS idx_projects_milestone_check ON projects(milestone_check);
+```
+
+### Milestone Check Workflow
+
+The `milestone_check` column follows this lifecycle:
+
+1. **Project Creation**: `milestone_check = false`
+2. **Oracle Verification (Pass)**: `milestone_check = true`
+3. **New Milestone Added**: `milestone_check = false` (automatically)
+4. **Oracle Verification (Pass)**: `milestone_check = true`
+
+### Oracle Integration
+
+For testing phase, use testnet oracles:
+- Chainlink testnet for milestone verification
+- Mock oracle service for development
+- Automated verification based on milestone criteria
+
+### Required Environment Variables
+
+Add to your `.env` file:
+
+```env
+# Oracle Configuration (Testnet)
+REACT_APP_ORACLE_ENABLED=true
+REACT_APP_CHAINLINK_TESTNET_URL=https://sepolia.infura.io/v3/your-key
+REACT_APP_ORACLE_CONTRACT_ADDRESS=0x...
+REACT_APP_ORACLE_PRIVATE_KEY=your-testnet-private-key
+```

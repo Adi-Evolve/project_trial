@@ -33,6 +33,9 @@ import EmailServiceDemo from './components/testing/EmailServiceDemo';
 import TestFundTransferPage from './pages/TestFundTransferPage';
 import { TestEscrowPage } from './pages/TestEscrowPage';
 import PinataTestPage from './pages/PinataTestPage';
+import ContractTest from './components/test/ContractTest';
+import DemoWorkflow from './components/demo/DemoWorkflow';
+import FullOracleSystem from './components/oracle/FullOracleSystem';
 import { AuthFlow } from './components/auth/AuthFlow';
 import WelcomeBack from './components/auth/WelcomeBack';
 import LandingPage from './components/landing/LandingPage';
@@ -252,6 +255,21 @@ const AppContent: React.FC = () => {
         <Route path="/test-pinata" element={
           <Layout>
             <PinataTestPage />
+          </Layout>
+        } />
+        <Route path="/test-contracts" element={
+          <Layout>
+            <ContractTest />
+          </Layout>
+        } />
+        <Route path="/demo" element={
+          <Layout>
+            <DemoWorkflow />
+          </Layout>
+        } />
+        <Route path="/oracle" element={
+          <Layout>
+            <FullOracleSystem />
           </Layout>
         } />
         

@@ -19,6 +19,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { enhancedProjectService } from '../services/enhancedProjectService';
+import { oracleService } from '../services/oracleService';
 
 interface ProjectData {
   id: string;
@@ -292,28 +294,63 @@ This project aims to revolutionize task management by incorporating artificial i
         completed: false
       };
 
-      setProjectData({
+      const updated = {
         ...projectData,
         milestones: [...projectData.milestones, milestone]
-      });
+      };
+
+      setProjectData(updated);
       setNewMilestone({ title: '', description: '', dueDate: '' });
+
+      // Persist to Supabase and notify oracle (fire-and-forget)
+      (async () => {
+        try {
+          const res = await enhancedProjectService.updateProject(projectData.id, { milestones: updated.milestones });
+          if (!res.success) {
+            console.warn('Failed to persist milestones:', res.error);
+            toast.error('Failed to save milestone to server (saved locally)');
+          } else {
+            toast.success('Milestone added');
+            // Reset milestone_check in DB so oracle re-checks
+            await oracleService.onMilestoneAdded(projectData.id);
+          }
+        } catch (err) {
+          console.error('Error saving milestone:', err);
+          toast.error('Failed to save milestone to server (saved locally)');
+        }
+      })();
     }
   };
 
   const toggleMilestone = (milestoneId: string) => {
     if (projectData) {
-      setProjectData({
-        ...projectData,
-        milestones: projectData.milestones.map(milestone =>
-          milestone.id === milestoneId
-            ? {
-                ...milestone,
-                completed: !milestone.completed,
-                completedAt: !milestone.completed ? new Date().toISOString() : undefined
-              }
-            : milestone
-        )
-      });
+      const newMilestones = projectData.milestones.map(milestone =>
+        milestone.id === milestoneId
+          ? {
+              ...milestone,
+              completed: !milestone.completed,
+              completedAt: !milestone.completed ? new Date().toISOString() : undefined
+            }
+          : milestone
+      );
+
+      setProjectData({ ...projectData, milestones: newMilestones });
+
+      // Persist milestone completion change
+      (async () => {
+        try {
+          const res = await enhancedProjectService.updateProject(projectData.id, { milestones: newMilestones });
+          if (!res.success) {
+            console.warn('Failed to persist milestone toggle:', res.error);
+            toast.error('Failed to save milestone status to server (saved locally)');
+          } else {
+            toast.success('Milestone updated');
+          }
+        } catch (err) {
+          console.error('Error updating milestone:', err);
+          toast.error('Failed to save milestone status to server (saved locally)');
+        }
+      })();
     }
   };
 

@@ -72,6 +72,14 @@ const ContributionsDisplay: React.FC<ContributionsDisplayProps> = ({
     });
   };
 
+  const truncateAddress = (addr?: string) => {
+    if (!addr) return 'Unknown';
+    if (addr.length > 12 && addr.startsWith('0x')) {
+      return `${addr.slice(0,6)}...${addr.slice(-4)}`;
+    }
+    return addr;
+  };
+
   const formatEthAmount = (amount: number) => {
     return amount.toFixed(4);
   };
@@ -198,7 +206,7 @@ const ContributionsDisplay: React.FC<ContributionsDisplayProps> = ({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
                         <span className="font-semibold text-gray-900">
-                          {contribution.is_anonymous ? 'Anonymous' : contribution.contributor_name}
+                          {contribution.is_anonymous ? 'Anonymous' : truncateAddress(contribution.contributor_name)}
                         </span>
                         {contribution.confirmed_at && (
                           <CheckBadgeIcon className="w-4 h-4 text-green-500" title="Confirmed" />

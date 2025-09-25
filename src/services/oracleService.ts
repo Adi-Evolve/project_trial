@@ -1,4 +1,6 @@
 import { advancedContractService } from './advancedContracts';
+import { supabase } from './supabase';
+import { blockchainService } from './blockchain';
 
 export interface OracleInfo {
   address: string;
@@ -7,6 +9,21 @@ export interface OracleInfo {
   totalVotes: number;
   correctVotes: number;
   accuracy: number;
+}
+
+// Add milestone check interfaces
+export interface MilestoneVerificationResult {
+  success: boolean;
+  verified: boolean;
+  reason?: string;
+  oracleId?: string;
+}
+
+export interface ProjectVerificationResult {
+  success: boolean;
+  verified: boolean;
+  reason?: string;
+  oracleId?: string;
 }
 
 export interface VerificationRequest {
@@ -49,6 +66,7 @@ export enum VerificationStatus {
 
 class OracleService {
   private initialized = false;
+  private autoVerifierInterval: NodeJS.Timeout | null = null;
 
   async initialize(): Promise<void> {
     if (!this.initialized) {
@@ -63,6 +81,7 @@ class OracleService {
   }
 
   // Oracle Management
+
   async getActiveOracles(): Promise<OracleInfo[]> {
     await this.initialize();
     
@@ -390,6 +409,400 @@ class OracleService {
   async getMinimumOraclesForConsensus(): Promise<number> {
     const oracles = await this.getActiveOracles();
     return Math.max(3, Math.ceil(oracles.length * 0.66)); // 2/3 majority
+  }
+
+  // ========================
+  // Auto-verifier (testnet/demo)
+  // ========================
+  /**
+   * Start an auto-verification loop that polls pending verification requests
+   * and attempts to verify them using the demo verify path. This is intended
+   * for testnets / demo environments where a single-node verification is acceptable.
+   */
+  startAutoVerifier(pollIntervalMs: number = 30_000) {
+    if (this.autoVerifierInterval) {
+      console.log('Auto-verifier already running');
+      return;
+    }
+
+    console.log('Starting auto-verifier for oracle verification (demo mode)');
+    this.autoVerifierInterval = setInterval(async () => {
+      try {
+        const pending = await this.getPendingVerificationRequests();
+        if (!pending || pending.length === 0) return;
+
+        for (const req of pending) {
+          try {
+            console.log(`Auto-verifier: attempting verify for request ${req.requestId} (campaign ${req.campaignId})`);
+
+            // For demo/testnet, call the advancedContractService.verifyMilestone (if available)
+            // or fall back to the demo path that simulates verification.
+            try {
+              // Try to use the on-chain demo verify (this may revert if not owner/authorized)
+              const verifyResult = await (advancedContractService as any).verifyMilestoneDemo?.(req.campaignId, req.milestoneIndex);
+              if (verifyResult && verifyResult.hash) {
+                console.log(`Auto-verifier: submitted on-chain verify tx ${verifyResult.hash} for request ${req.requestId}`);
+                continue; // move to next request
+              }
+            } catch (e: any) {
+              console.log('Auto-verifier: on-chain verify failed or not available, falling back to service verify', e?.message || String(e));
+            }
+
+            // Fallback: use local oracleService.verifyMilestoneCheck path which updates DB and simulates verification
+            // Retrieve campaign/milestone data from supabase if needed; we'll just call demo verification helper
+            const demoVerify = await this.verifyMilestoneCheck(String(req.campaignId), { title: 'Demo milestone', description: 'Auto-verified by demo verifier', deliverables: ['auto'], targetAmount: 0.001 });
+            if (demoVerify.success && demoVerify.verified) {
+              console.log(`Auto-verifier: demo verified request ${req.requestId} successfully`);
+            } else {
+              console.log(`Auto-verifier: demo verification did not verify request ${req.requestId}:`, demoVerify.reason);
+            }
+          } catch (inner) {
+            console.error('Auto-verifier: failed verifying request', req.requestId, inner);
+          }
+        }
+      } catch (err) {
+        console.error('Auto-verifier error while polling pending requests:', err);
+      }
+    }, pollIntervalMs);
+  }
+
+  stopAutoVerifier() {
+    if (this.autoVerifierInterval) {
+      clearInterval(this.autoVerifierInterval);
+      this.autoVerifierInterval = null;
+      console.log('Stopped auto-verifier');
+    }
+  }
+
+  // NEW: Milestone Check Oracle Methods
+  
+  // Simulate oracle verification for milestone check (testnet)
+  async verifyMilestoneCheck(projectId: string, milestoneData: any): Promise<MilestoneVerificationResult> {
+    console.log('🔍 Oracle verifying milestone for project:', projectId);
+    
+    try {
+      // Mock verification criteria for milestone check
+      const hasTitle = milestoneData.title && milestoneData.title.length > 5;
+      const hasDescription = milestoneData.description && milestoneData.description.length > 20;
+      const hasDeliverables = milestoneData.deliverables && milestoneData.deliverables.length > 0;
+      const hasReasonableAmount = milestoneData.targetAmount && milestoneData.targetAmount > 0;
+      
+      const verified = hasTitle && hasDescription && hasDeliverables && hasReasonableAmount;
+      
+      // Simulate oracle response delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const oracleId = `oracle_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      if (verified) {
+        console.log('✅ Oracle verification PASSED for project:', projectId);
+        return {
+          success: true,
+          verified: true,
+          oracleId,
+          reason: 'Milestone meets verification criteria'
+        };
+      } else {
+        console.log('❌ Oracle verification FAILED for project:', projectId);
+        return {
+          success: true,
+          verified: false,
+          oracleId,
+          reason: 'Milestone does not meet verification criteria'
+        };
+      }
+      
+    } catch (error) {
+      console.error('🚨 Oracle verification error:', error);
+      return {
+        success: false,
+        verified: false,
+        reason: 'Oracle service unavailable'
+      };
+    }
+  }
+
+  // Verify project on creation (for milestone_check)
+  async verifyProjectCheck(projectId: string, projectData: any): Promise<ProjectVerificationResult> {
+    console.log('🔍 Oracle verifying project:', projectId);
+    
+    try {
+      // Mock project verification criteria
+      const hasValidTitle = projectData.title && projectData.title.length > 5;
+      const hasValidDescription = projectData.description && projectData.description.length > 50;
+      const hasValidCategory = projectData.category && projectData.category !== '';
+      const hasValidFunding = projectData.fundingGoal && projectData.fundingGoal > 0;
+      
+      const verified = hasValidTitle && hasValidDescription && hasValidCategory && hasValidFunding;
+      
+      // Simulate oracle response delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const oracleId = `oracle_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      if (verified) {
+        console.log('✅ Oracle verification PASSED for project:', projectId);
+        return {
+          success: true,
+          verified: true,
+          oracleId,
+          reason: 'Project meets verification criteria'
+        };
+      } else {
+        console.log('❌ Oracle verification FAILED for project:', projectId);
+        return {
+          success: true,
+          verified: false,
+          oracleId,
+          reason: 'Project does not meet verification criteria'
+        };
+      }
+      
+    } catch (error) {
+      console.error('🚨 Oracle verification error:', error);
+      return {
+        success: false,
+        verified: false,
+        reason: 'Oracle service unavailable'
+      };
+    }
+  }
+
+  // Update milestone_check in Supabase
+  async updateMilestoneCheck(projectId: string, verified: boolean, oracleId?: string): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      console.log(`🔄 Updating milestone_check for project ${projectId} to ${verified}`);
+      
+      const updateData: any = {
+        milestone_check: verified,
+        updated_at: new Date().toISOString()
+      };
+      
+      if (oracleId) {
+        updateData.last_oracle_verification = {
+          oracleId,
+          timestamp: new Date().toISOString(),
+          verified
+        };
+      }
+      
+      const { error } = await supabase
+        .from('projects')
+        .update(updateData)
+        .eq('id', projectId);
+      
+      if (error) {
+        console.error('❌ Failed to update milestone_check:', error);
+        // If error indicates missing column in schema cache, retry without last_oracle_verification
+        const msg = error.message || '';
+        if (msg.includes('last_oracle_verification') || msg.includes('could not find') || (error.details && String(error.details).includes('last_oracle_verification'))) {
+          try {
+            const retryData = { ...updateData };
+            delete retryData.last_oracle_verification;
+            const { error: retryError } = await supabase
+              .from('projects')
+              .update(retryData)
+              .eq('id', projectId);
+
+            if (retryError) {
+              console.error('Retry without last_oracle_verification failed:', retryError);
+              return { success: false, error: retryError.message };
+            }
+
+            console.log('✅ Updated milestone_check without last_oracle_verification (db lacked column)');
+            return { success: true };
+          } catch (retryEx: any) {
+            console.error('Retry exception:', retryEx);
+            return { success: false, error: retryEx.message };
+          }
+        }
+
+        return { success: false, error: error.message };
+      }
+      
+      console.log('✅ Successfully updated milestone_check to:', verified);
+
+      // If milestone verification passed, attempt to release funds on-chain automatically (best-effort)
+      if (verified) {
+        (async () => {
+          try {
+            // Load project to get blockchain campaign id
+            const { data: project, error: projectErr } = await supabase
+              .from('projects')
+              .select('id, blockchain_campaign_id')
+              .eq('id', projectId)
+              .single();
+
+            if (projectErr || !project || !project.blockchain_campaign_id) {
+              console.log('No blockchain campaign id found for project, skipping on-chain release');
+              return;
+            }
+
+            const campaignId = Number(project.blockchain_campaign_id);
+
+            // Find the first approved milestone that hasn't been released yet
+            const { data: approvedMilestones } = await supabase
+              .from('project_milestones')
+              .select('id, targetAmount, status, createdAt')
+              .eq('projectId', projectId)
+              .in('status', ['approved'])
+              .order('createdAt', { ascending: true });
+
+            if (!approvedMilestones || approvedMilestones.length === 0) {
+              console.log('No approved milestone found to release for project', projectId);
+              return;
+            }
+
+            // Use the first approved milestone as the next to release
+            const milestoneToRelease = approvedMilestones[0];
+
+            // Determine milestone index by ordering all milestones
+            const { data: allMilestones } = await supabase
+              .from('project_milestones')
+              .select('id')
+              .eq('projectId', projectId)
+              .order('createdAt', { ascending: true });
+
+            const milestoneIndex = allMilestones ? allMilestones.findIndex((m: any) => m.id === milestoneToRelease.id) : -1;
+
+            if (milestoneIndex < 0) {
+              console.log('Could not determine milestone index for release; skipping');
+              return;
+            }
+
+            console.log(`🔐 Calling on-chain release for campaign ${campaignId}, milestoneIndex ${milestoneIndex}`);
+
+            const releaseTx = await blockchainService.releaseMilestoneFunds(campaignId, milestoneIndex);
+
+            if (!releaseTx) {
+              console.error('On-chain release failed or returned null');
+              return;
+            }
+
+            // Record executed release in escrow_releases table (mark executed)
+            try {
+              const amount = String(milestoneToRelease.targetAmount || 0);
+              const { error: insertErr } = await supabase
+                .from('escrow_releases')
+                .insert([{ id: crypto.randomUUID(), projectId, milestoneId: milestoneToRelease.id, amount, releaseType: 'milestone', status: 'executed', requestedBy: 'oracle_service', requestedAt: new Date().toISOString(), transactionHash: releaseTx.txHash, executedAt: new Date().toISOString() }]);
+
+              if (insertErr) {
+                console.error('Failed to insert executed escrow_releases record:', insertErr);
+              }
+            } catch (dbErr) {
+              console.error('Error recording escrow release in DB:', dbErr);
+            }
+
+            // Update milestone status to released
+            try {
+              await supabase
+                .from('project_milestones')
+                .update({ status: 'released', updatedAt: new Date().toISOString() })
+                .eq('id', milestoneToRelease.id);
+            } catch (mErr) {
+              console.error('Failed to update milestone status to released:', mErr);
+            }
+
+            console.log('✅ On-chain release executed and recorded for milestone', milestoneToRelease.id);
+          } catch (releaseErr: any) {
+            console.error('Error during automatic on-chain release after verification:', releaseErr);
+          }
+        })();
+      }
+
+      return { success: true };
+      
+    } catch (error: any) {
+      console.error('🚨 Error updating milestone_check:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Handle milestone addition (set milestone_check to false)
+  async onMilestoneAdded(projectId: string): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    console.log('📝 Milestone added to project:', projectId, '- setting milestone_check to false');
+    
+    return this.updateMilestoneCheck(projectId, false);
+  }
+
+  // Complete oracle workflow for project milestone check
+  async runProjectVerificationCheck(projectId: string, projectData: any): Promise<{
+    success: boolean;
+    verified: boolean;
+    reason?: string;
+  }> {
+    console.log('🚀 Running complete oracle verification for project:', projectId);
+    
+    // Step 1: Verify project with oracle
+    const verificationResult = await this.verifyProjectCheck(projectId, projectData);
+    
+    if (!verificationResult.success) {
+      return verificationResult;
+    }
+    
+    // Step 2: Update milestone_check based on verification result
+    const updateResult = await this.updateMilestoneCheck(
+      projectId, 
+      verificationResult.verified, 
+      verificationResult.oracleId
+    );
+    
+    if (!updateResult.success) {
+      return {
+        success: false,
+        verified: false,
+        reason: `Oracle verified but database update failed: ${updateResult.error}`
+      };
+    }
+    
+    return {
+      success: true,
+      verified: verificationResult.verified,
+      reason: verificationResult.reason
+    };
+  }
+
+  // Complete oracle workflow for milestone check
+  async runMilestoneVerificationCheck(projectId: string, milestoneData: any): Promise<{
+    success: boolean;
+    verified: boolean;
+    reason?: string;
+  }> {
+    console.log('🚀 Running complete oracle verification for milestone on project:', projectId);
+    
+    // Step 1: Verify milestone with oracle
+    const verificationResult = await this.verifyMilestoneCheck(projectId, milestoneData);
+    
+    if (!verificationResult.success) {
+      return verificationResult;
+    }
+    
+    // Step 2: Update milestone_check based on verification result
+    const updateResult = await this.updateMilestoneCheck(
+      projectId, 
+      verificationResult.verified, 
+      verificationResult.oracleId
+    );
+    
+    if (!updateResult.success) {
+      return {
+        success: false,
+        verified: false,
+        reason: `Oracle verified but database update failed: ${updateResult.error}`
+      };
+    }
+    
+    return {
+      success: true,
+      verified: verificationResult.verified,
+      reason: verificationResult.reason
+    };
   }
 }
 

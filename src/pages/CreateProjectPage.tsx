@@ -4,11 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { ipfsService } from '../services/ipfsService';
+import axios from 'axios';
 import { advancedContractService, CampaignType } from '../services/advancedContracts';
 import mockBlockchainService from '../services/mockBlockchain';
 import { localStorageService } from '../services/localStorage';
 import { enhancedProjectService } from '../services/enhancedProjectService';
 import { web3Service } from '../services/web3';
+import { oracleService } from '../services/oracleService';
 import {
   PlusIcon,
   PhotoIcon,
@@ -252,8 +254,9 @@ const CreateProjectPage: React.FC = () => {
         return;
       }
 
-      // Upload images to IPFS
+      // Upload images to IPFS and mirror to imgbb
       let imageHashes: string[] = [];
+      let imageUrls: string[] = [];
       if (formData.images.length > 0) {
         toast.loading('Uploading images to IPFS...');
         
@@ -277,6 +280,27 @@ const CreateProjectPage: React.FC = () => {
         }
         toast.dismiss();
 
+      }
+
+      // If imgbb key is provided, upload images there as well for CDN URLs
+      const IMG_BB_KEY = process.env.REACT_APP_IMGBB_API_KEY || '272785e1c6e6221d927bad99483ff9ed';
+      if (IMG_BB_KEY && formData.images.length > 0) {
+        toast.loading('Uploading images to imgbb...');
+        for (const image of formData.images) {
+          try {
+            const form = new FormData();
+            form.append('image', image);
+            const res = await axios.post(`https://api.imgbb.com/1/upload?key=${IMG_BB_KEY}`, form, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            if (res.data && res.data.data && res.data.data.url) {
+              imageUrls.push(res.data.data.url);
+            }
+          } catch (imgErr) {
+            console.warn('ImgBB upload failed for image', image.name, imgErr);
+          }
+        }
+        toast.dismiss();
       }
 
       // Create project metadata for IPFS
@@ -328,7 +352,8 @@ const CreateProjectPage: React.FC = () => {
         tags: formData.tags,
         demoUrl: formData.demoUrl,
         videoUrl: formData.videoUrl,
-        imageHashes,
+  imageHashes,
+  imageUrls,
         fundingGoal: formData.fundingGoal,
         currentFunding: 0,
         deadline: formData.deadline,
@@ -355,7 +380,13 @@ const CreateProjectPage: React.FC = () => {
         fundingGoal: projectData.fundingGoal
       });
       
-      const saveResult = await enhancedProjectService.saveProject(projectData);
+      // Add milestone_check = false on project creation
+      const projectDataWithMilestoneCheck = {
+        ...projectData,
+        milestone_check: false
+      };
+      
+  const saveResult = await enhancedProjectService.saveProject(projectDataWithMilestoneCheck);
       toast.dismiss();
       
       console.log('💾 SAVE RESULT:', saveResult);
@@ -516,6 +547,33 @@ const CreateProjectPage: React.FC = () => {
         } else {
           toast.success('🎉 Project created successfully!');
         }
+        
+        // 🔮 NEW: Run Oracle Verification for milestone_check
+        try {
+          toast.loading('Running oracle verification...');
+          
+          const oracleVerificationResult = await oracleService.runProjectVerificationCheck(
+            projectId,
+            projectDataWithMilestoneCheck
+          );
+          
+          toast.dismiss();
+          
+          if (oracleVerificationResult.success) {
+            if (oracleVerificationResult.verified) {
+              toast.success('✅ Oracle verification passed! Project approved.');
+            } else {
+              toast.error(`⚠️ Oracle verification failed: ${oracleVerificationResult.reason}`);
+            }
+          } else {
+            toast.error(`🚨 Oracle verification error: ${oracleVerificationResult.reason}`);
+          }
+          
+        } catch (oracleError: any) {
+          console.error('Oracle verification failed:', oracleError);
+          toast.error('⚠️ Oracle verification unavailable, but project was created');
+        }
+        
       } catch (blockchainError: any) {
         console.error('Blockchain registration failed:', blockchainError);
         toast.success('🎉 Project created successfully!');
@@ -524,7 +582,7 @@ const CreateProjectPage: React.FC = () => {
       // Redirect to projects page
       setTimeout(() => {
         navigate('/projects');
-      }, 2000);
+      }, 3000);
 
     } catch (error: any) {
       console.error('Project creation error:', error);

@@ -5,9 +5,11 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
-interface IOracle {
-    function requestMilestoneVerification(uint256 campaignId, uint256 milestoneId) external;
-    function getMilestoneStatus(uint256 campaignId, uint256 milestoneId) external view returns (bool);
+// ENHANCED INTERFACES
+interface IDecentralizedOracle {
+    function requestMilestoneVerification(uint256 campaignId, uint256 milestoneId, string calldata ipfsHash) external;
+    function getMilestoneVerificationStatus(uint256 campaignId, uint256 milestoneId) external view returns (bool verified, bool consensus);
+    function isOracleActive(address oracle) external view returns (bool);
 }
 
 interface IZKP {
@@ -24,13 +26,17 @@ contract CrowdfundingPlatform is ReentrancyGuard, Ownable {
     Counters.Counter private _campaignIds;
     
     // Contract addresses
-    IOracle public oracle;
+    IDecentralizedOracle public oracle;
     IZKP public zkpVerifier;
     address public multisigWallet;
     
-    // Platform fee (in basis points, e.g., 250 = 2.5%)
-    uint256 public platformFeeRate = 250;
+    // Platform fee (in basis points, e.g., 200 = 2%)
+    uint256 public platformFeeRate = 200;
     uint256 private constant BASIS_POINTS = 10000;
+    
+    // AUTO-TRANSFER SETTINGS
+    bool public autoTransferEnabled = true;
+    uint256 public minAutoTransferAmount = 0.01 ether; // Minimum amount for auto-transfer
     
     // Enums
     enum UserType { NONE, PROJECT_CREATOR, NGO_CREATOR, BACKER }
@@ -99,6 +105,9 @@ contract CrowdfundingPlatform is ReentrancyGuard, Ownable {
     event MilestoneAdded(uint256 indexed campaignId, uint256 milestoneId, string description);
     event MilestoneCompleted(uint256 indexed campaignId, uint256 milestoneId, uint256 amountReleased);
     event FundsWithdrawn(uint256 indexed campaignId, address indexed creator, uint256 amount);
+    event AutoTransferExecuted(uint256 indexed campaignId, address indexed creator, uint256 amount, uint256 platformFee);
+    event OracleVerificationRequested(uint256 indexed campaignId, uint256 milestoneId, string ipfsHash);
+    event EmergencyWithdrawal(uint256 indexed campaignId, address indexed creator, uint256 amount, string reason);
     event RefundIssued(uint256 indexed campaignId, address indexed contributor, uint256 amount);
     event EmergencyStop(uint256 indexed campaignId, bool stopped);
     event PlatformFeeUpdated(uint256 oldFee, uint256 newFee);
@@ -132,9 +141,48 @@ contract CrowdfundingPlatform is ReentrancyGuard, Ownable {
         address _zkpVerifier,
         address _multisigWallet
     ) Ownable(msg.sender) {
-        oracle = IOracle(_oracle);
+        require(_oracle != address(0), "Invalid oracle address");
+        require(_zkpVerifier != address(0), "Invalid ZKP verifier address");
+        require(_multisigWallet != address(0), "Invalid multisig wallet address");
+        
+        oracle = IDecentralizedOracle(_oracle);
         zkpVerifier = IZKP(_zkpVerifier);
         multisigWallet = _multisigWallet;
+        platformFeeRate = 250; // 2.5% default
+        autoTransferEnabled = true;
+        minAutoTransferAmount = 1 ether;
+    }
+    
+    /**
+     * @dev Set oracle contract address
+     */
+    function setOracle(address _oracle) external onlyOwner {
+        require(_oracle != address(0), "Invalid oracle address");
+        oracle = IDecentralizedOracle(_oracle);
+    }
+    
+    /**
+     * @dev Toggle auto-transfer functionality
+     */
+    function setAutoTransfer(bool _enabled) external onlyOwner {
+        autoTransferEnabled = _enabled;
+    }
+    
+    /**
+     * @dev Set minimum auto-transfer amount
+     */
+    function setMinAutoTransferAmount(uint256 _amount) external onlyOwner {
+        minAutoTransferAmount = _amount;
+    }
+    
+    /**
+     * @dev Set platform fee rate (in basis points)
+     */
+    function setPlatformFeeRate(uint256 _rate) external onlyOwner {
+        require(_rate <= 1000, "Fee cannot exceed 10%"); // Max 10%
+        uint256 oldFee = platformFeeRate;
+        platformFeeRate = _rate;
+        emit PlatformFeeUpdated(oldFee, _rate);
     }
     
     /**
@@ -284,6 +332,24 @@ contract CrowdfundingPlatform is ReentrancyGuard, Ownable {
         if (campaign.currentFunding >= campaign.fundingGoal) {
             campaign.status = CampaignStatus.COMPLETED;
             users[campaign.creator].totalRaised += campaign.currentFunding;
+            
+            // AUTO-TRANSFER: Automatically transfer funds to fundraiser when goal is reached
+            if (autoTransferEnabled && campaign.currentFunding >= minAutoTransferAmount) {
+                uint256 amount = campaign.currentFunding;
+                campaign.currentFunding = 0; // Reset to prevent re-entrancy
+                
+                // Calculate platform fee
+                uint256 platformFee = (amount * platformFeeRate) / BASIS_POINTS;
+                uint256 creatorAmount = amount - platformFee;
+                
+                // Transfer funds immediately
+                payable(campaign.creator).transfer(creatorAmount);
+                if (platformFee > 0) {
+                    payable(multisigWallet).transfer(platformFee);
+                }
+                
+                emit AutoTransferExecuted(_campaignId, campaign.creator, creatorAmount, platformFee);
+            }
         }
         
         emit CampaignFunded(_campaignId, msg.sender, msg.value);
@@ -342,7 +408,8 @@ contract CrowdfundingPlatform is ReentrancyGuard, Ownable {
         milestone.deliverableHash = _deliverableHash;
         
         // Request oracle verification
-        oracle.requestMilestoneVerification(_campaignId, _milestoneId);
+        oracle.requestMilestoneVerification(_campaignId, _milestoneId, _deliverableHash);
+        emit OracleVerificationRequested(_campaignId, _milestoneId, _deliverableHash);
     }
     
     /**
@@ -358,7 +425,8 @@ contract CrowdfundingPlatform is ReentrancyGuard, Ownable {
         
         Milestone storage milestone = campaign.milestones[_milestoneId];
         require(!milestone.fundsReleased, "Funds already released");
-        require(oracle.getMilestoneStatus(_campaignId, _milestoneId), "Milestone not verified");
+        (bool verified, bool consensus) = oracle.getMilestoneVerificationStatus(_campaignId, _milestoneId);
+        require(verified && consensus, "Milestone not verified or no consensus");
         
         milestone.status = MilestoneStatus.VERIFIED;
         milestone.fundsReleased = true;
@@ -459,7 +527,7 @@ contract CrowdfundingPlatform is ReentrancyGuard, Ownable {
         external 
         onlyOwner 
     {
-        if (_oracle != address(0)) oracle = IOracle(_oracle);
+        if (_oracle != address(0)) oracle = IDecentralizedOracle(_oracle);
         if (_zkpVerifier != address(0)) zkpVerifier = IZKP(_zkpVerifier);
         if (_multisigWallet != address(0)) multisigWallet = _multisigWallet;
     }

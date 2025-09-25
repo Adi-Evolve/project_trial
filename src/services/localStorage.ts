@@ -26,8 +26,10 @@ export interface StoredProject {
   demoUrl?: string;
   videoUrl?: string;
   imageHashes?: string[];
+  imageUrls?: string[];
   ipfsHash?: string;
   blockchainTxHash?: string;
+  blockchainId?: string;
   blockchainRecord?: {
     txHash: string;
     blockNumber?: number;

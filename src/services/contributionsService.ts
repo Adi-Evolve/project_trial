@@ -16,6 +16,7 @@ export interface ContributionData {
   status: 'pending' | 'confirmed' | 'failed';
   contribution_message?: string;
   is_anonymous?: boolean;
+  is_zkp?: boolean;
   reward_tier?: string;
   created_at?: string;
   confirmed_at?: string;
@@ -58,29 +59,51 @@ class ContributionsService {
         
         // Fallback to direct insert
         console.log('📤 Making direct insert to contributions table...');
-        const { data, error } = await supabase
-          .from('contributions')
-          .insert([contribution])
-          .select()
-          .single();
+        // Defensive insert: attempt to insert with is_zkp, but fall back if column doesn't exist
+        let insertPayload: any = { ...contribution };
+        try {
+          const { data, error } = await supabase
+            .from('contributions')
+            .insert([insertPayload])
+            .select()
+            .single();
 
-        if (error) {
-          console.error('❌ Failed to save contribution:', {
-            code: error.code,
-            message: error.message,
-            details: error.details
-          });
-          
-          let errorMessage = error.message;
-          if (error.code === '42501') {
-            errorMessage = 'Database permissions error. Please contact support or run database setup.';
+          if (error) throw error;
+
+          console.log('✅ Contribution saved successfully (direct):', data);
+          return { success: true, contribution: data };
+        } catch (insertErr: any) {
+          const msg = insertErr?.message || String(insertErr || '');
+          // If column missing (e.g., is_zkp), retry without that field
+          if (msg.includes('is_zkp') || msg.includes('could not find') || msg.includes('undefined column')) {
+            try {
+              const fallback = { ...insertPayload };
+              delete fallback.is_zkp;
+              const { data: fallbackData, error: fallbackError } = await supabase
+                .from('contributions')
+                .insert([fallback])
+                .select()
+                .single();
+
+              if (fallbackError) {
+                console.error('❌ Failed to save contribution (fallback):', fallbackError);
+                return { success: false, error: fallbackError.message };
+              }
+
+              console.log('✅ Contribution saved successfully (fallback):', fallbackData);
+              return { success: true, contribution: fallbackData };
+            } catch (fbErr: any) {
+              console.error('❌ Fallback insert failed:', fbErr);
+              return { success: false, error: fbErr.message || String(fbErr) };
+            }
           }
-          
-          return { success: false, error: errorMessage };
+
+          // Not a schema issue, bubble up
+          console.error('❌ Failed to save contribution:', insertErr);
+          return { success: false, error: insertErr.message || String(insertErr) };
         }
 
-        console.log('✅ Contribution saved successfully (direct):', data);
-        return { success: true, contribution: data };
+        
       }
 
     } catch (error: any) {
@@ -172,39 +195,81 @@ class ContributionsService {
         project = projectByTitle;
       }
 
-      const { data: contributions, error } = await supabase
-        .from('contributions')
-        .select(`
-          id,
-          amount,
-          currency,
-          contribution_message,
-          is_anonymous,
-          created_at,
-          confirmed_at,
-          blockchain_tx_hash,
-          contributor_id,
-          status,
-          users!inner(email, raw_user_meta_data)
-        `)
-        .eq('project_id', project.id)
-        .eq('status', 'confirmed')
-        .order('created_at', { ascending: false });
+      // Try the embedded join first (fast) but fall back to separate queries if Supabase schema cache lacks the relationship
+      let contribsArray: any[] = [];
+      try {
+        const { data: contributions, error } = await supabase
+          .from('contributions')
+          .select(`
+            id,
+            amount,
+            currency,
+            contribution_message,
+            is_anonymous,
+            created_at,
+            confirmed_at,
+            blockchain_tx_hash,
+            contributor_id,
+            status,
+            contributor_wallet,
+            users!inner(email, raw_user_meta_data, wallet_address)
+          `)
+          .eq('project_id', project.id)
+          .eq('status', 'confirmed')
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('❌ Failed to get project contributions:', error);
-        return { success: false, error: error.message };
+        if (error) throw error;
+
+        contribsArray = (contributions as any) || [];
+      } catch (err: any) {
+        // If PostgREST returns PGRST200 (relationship missing) or similar, perform safe client-side merge
+        const msg = err?.message || String(err || '');
+        console.warn('⚠️ Embedded join failed for contributions. Falling back to separate queries:', msg);
+
+        // Fetch contributions without join
+        const { data: simpleContribs, error: simpleError } = await supabase
+          .from('contributions')
+          .select(`id, amount, currency, contribution_message, is_anonymous, created_at, confirmed_at, blockchain_tx_hash, contributor_id, status`)
+          .eq('project_id', project.id)
+          .eq('status', 'confirmed')
+          .order('created_at', { ascending: false });
+
+        if (simpleError) {
+          console.error('❌ Failed to fetch contributions (fallback):', simpleError);
+          return { success: false, error: simpleError.message };
+        }
+
+        const contribs = (simpleContribs as any[]) || [];
+
+        // Collect contributor IDs and wallet addresses that are present
+        const userIds = contribs.map(c => c.contributor_id).filter(Boolean);
+
+        let usersMap: Record<string, any> = {};
+        if (userIds.length > 0) {
+          const { data: users, error: usersError } = await supabase
+            .from('users')
+            .select('id, email, raw_user_meta_data, wallet_address')
+            .in('id', userIds);
+
+          if (!usersError && users) {
+            for (const u of users as any[]) {
+              usersMap[u.id] = u;
+            }
+          }
+        }
+
+        // Merge user info into contributions
+  contribsArray = contribs.map(c => ({ ...c, users: usersMap[c.contributor_id], contributor_wallet: (c as any).contributor_wallet }));
       }
 
-      const formattedContributions: ProjectContribution[] = contributions.map(contrib => ({
+      const formattedContributions: ProjectContribution[] = contribsArray.map(contrib => ({
         id: contrib.id,
         amount: contrib.amount,
         currency: contrib.currency,
-        contributor_name: contrib.is_anonymous 
-          ? 'Anonymous' 
-          : (contrib as any).users?.raw_user_meta_data?.name || 
-            (contrib as any).users?.email?.split('@')[0] || 
-            'Anonymous',
+        // Prefer explicit wallet if stored on contribution row, else use associated user's wallet, otherwise show name/email fallback
+        contributor_name: contrib.is_anonymous
+          ? 'Anonymous'
+          : (contrib as any).contributor_wallet || (contrib as any).users?.wallet_address || (contrib as any).users?.raw_user_meta_data?.name || (contrib as any).users?.email?.split('@')[0] || 'Anonymous',
         contribution_message: contrib.contribution_message || undefined,
         is_anonymous: contrib.is_anonymous,
         created_at: contrib.created_at,
@@ -212,11 +277,11 @@ class ContributionsService {
         blockchain_tx_hash: contrib.blockchain_tx_hash
       }));
 
-      const totalAmount = contributions.reduce((sum, contrib) => sum + contrib.amount, 0);
-      const totalContributors = new Set(contributions.map(contrib => contrib.contributor_id)).size;
+  const totalAmount = contribsArray.reduce((sum, contrib) => sum + contrib.amount, 0);
+  const totalContributors = new Set(contribsArray.map(contrib => contrib.contributor_id)).size;
 
       console.log('✅ Retrieved contributions:', {
-        count: contributions.length,
+        count: contribsArray.length,
         totalAmount,
         totalContributors
       });
@@ -275,7 +340,8 @@ class ContributionsService {
     currency: string,
     txHash: string,
     message?: string,
-    isAnonymous?: boolean
+    isAnonymous?: boolean,
+    isZkp?: boolean
   ): Promise<{
     success: boolean;
     contribution?: ContributionData;
@@ -393,7 +459,8 @@ class ContributionsService {
         blockchain_tx_hash: txHash,
         status: 'pending',
         contribution_message: message,
-        is_anonymous: isAnonymous || false
+        is_anonymous: isAnonymous || false,
+        is_zkp: isZkp || false
       };
 
       console.log('📝 Contribution data to save:', contributionData);

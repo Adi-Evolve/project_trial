@@ -249,7 +249,7 @@ export const EscrowManagement: React.FC<EscrowManagementProps> = ({
               {isOwner && milestones.length === 0 && (
                 <button
                   onClick={() => {setActiveTab('create'); setShowCreateMilestone(true);}}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+                  className="bg-indigo-600 text-black px-4 py-2 rounded-md hover:bg-indigo-700"
                 >
                   Create Milestones
                 </button>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   PlusIcon,
@@ -67,6 +68,8 @@ const MyProjectsPage: React.FC = () => {
     }
   }, [user]);
 
+  const navigate = useNavigate();
+
   const loadUserProjects = async () => {
     try {
       setLoading(true);
@@ -96,7 +99,10 @@ const MyProjectsPage: React.FC = () => {
         collaborators: 1, // Default to 1
         createdDate: project.created_at,
         lastUpdated: project.updated_at,
-        image: project.image_url,
+        // Prefer image_urls (text[]) -> image_url (legacy) -> image_hashes (ipfs hashes)
+        image: (project.image_urls && project.image_urls.length > 0)
+                 ? project.image_urls[0]
+                 : (project.image_url || (project.image_hashes && project.image_hashes.length > 0 ? `https://gateway.pinata.cloud/ipfs/${project.image_hashes[0]}` : undefined)),
         tags: project.tags || [],
         progress: project.progress || 0,
         isLiked: false, // Would need additional query
@@ -476,6 +482,7 @@ const MyProjectsPage: React.FC = () => {
                         <motion.button
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
+                          onClick={() => navigate(`/edit-project/${project.id}`)}
                           className="p-2 rounded-lg bg-secondary-700/50 hover:bg-secondary-600/50 transition-colors"
                           title="Edit Project"
                         >
