@@ -346,10 +346,22 @@ const CreateProjectPage: React.FC = () => {
       // Save project to both localStorage and Supabase
       toast.loading('Creating project...');
       
+      console.log('🚀 CREATING PROJECT - Starting save process...');
+      console.log('📊 Project data to save:', {
+        id: projectData.id,
+        title: projectData.title,
+        creatorId: projectData.creatorId,
+        category: projectData.category,
+        fundingGoal: projectData.fundingGoal
+      });
+      
       const saveResult = await enhancedProjectService.saveProject(projectData);
       toast.dismiss();
+      
+      console.log('💾 SAVE RESULT:', saveResult);
 
       if (!saveResult.success || !saveResult.project) {
+        console.error('❌ Project save failed:', saveResult.error);
         throw new Error(saveResult.error || 'Failed to create project');
       }
 
@@ -455,18 +467,50 @@ const CreateProjectPage: React.FC = () => {
             verified: true
           };
           
+          // 🎯 KEY FIX: Ensure project exists in Supabase before updating
+          console.log('🔍 Ensuring project is saved to Supabase...');
+          console.log('🔗 Blockchain TX Hash:', blockchainResult.txHash);
+          console.log('📋 Saved project data:', {
+            id: savedProject.id,
+            title: savedProject.title,
+            creatorId: savedProject.creatorId
+          });
+          
+          // First, try to save the project to Supabase with blockchain data
+          const ensureSupabaseResult = await enhancedProjectService.ensureProjectInSupabase(
+            projectId, 
+            savedProject, 
+            blockchainResult.txHash
+          );
+          
+          console.log('🔧 ENSURE SUPABASE RESULT:', ensureSupabaseResult);
+          
+          if (ensureSupabaseResult.success) {
+            console.log('✅ Project confirmed in Supabase with blockchain hash');
+          } else {
+            console.error('❌ Failed to ensure project in Supabase:', ensureSupabaseResult.error);
+          }
+
+          console.log('🔄 Updating project with blockchain data...');
+          
           const updateResult = await enhancedProjectService.updateProject(projectId, { 
             blockchainTxHash: blockchainResult.txHash,
             blockchainRecord 
           });
           
+          console.log('🔄 UPDATE RESULT:', updateResult);
+          
           // Also ensure IPFS hash is synced to Supabase
           if (savedProject.ipfsHash) {
+            console.log('🌐 Syncing IPFS hash to Supabase...');
             await enhancedProjectService.syncIPFSHashToSupabase(savedProject.id, savedProject.ipfsHash);
           }
+          
           if (updateResult.success) {
+            console.log('✅ PROJECT CREATION COMPLETE!');
             toast.success('🎉 Project created successfully!');
           } else {
+            console.log('⚠️ Update failed but project was created');
             toast.success('🎉 Project created successfully!');
           }
         } else {

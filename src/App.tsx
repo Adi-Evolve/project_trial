@@ -32,6 +32,7 @@ import SearchResultsPage from './pages/SearchResultsPage';
 import EmailServiceDemo from './components/testing/EmailServiceDemo';
 import TestFundTransferPage from './pages/TestFundTransferPage';
 import { TestEscrowPage } from './pages/TestEscrowPage';
+import PinataTestPage from './pages/PinataTestPage';
 import { AuthFlow } from './components/auth/AuthFlow';
 import WelcomeBack from './components/auth/WelcomeBack';
 import LandingPage from './components/landing/LandingPage';
@@ -246,6 +247,11 @@ const AppContent: React.FC = () => {
         <Route path="/test-escrow" element={
           <Layout>
             <TestEscrowPage />
+          </Layout>
+        } />
+        <Route path="/test-pinata" element={
+          <Layout>
+            <PinataTestPage />
           </Layout>
         } />
         

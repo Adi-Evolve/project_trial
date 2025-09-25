@@ -230,8 +230,19 @@ const DonationWidget: React.FC<DonationWidgetProps> = ({
 
       if (result.success && result.transactionHash) {
         console.log('✅ Blockchain transaction successful:', result.transactionHash);
+        console.log('🔄 Starting database save process...');
+        console.log('📊 Save parameters:', {
+          projectId,
+          userId: user.id,
+          amount: parseFloat(formData.amount),
+          currency: 'ETH',
+          txHash: result.transactionHash,
+          message: formData.message || undefined,
+          isAnonymous: false
+        });
         
         // Save contribution to database
+        console.log('🔄 Calling contributionsService.processContribution...');
         const contributionResult = await contributionsService.processContribution(
           projectId,
           user.id!,
@@ -242,15 +253,26 @@ const DonationWidget: React.FC<DonationWidgetProps> = ({
           false // Not anonymous
         );
 
+        console.log('📈 Contribution service result:', contributionResult);
+
         if (contributionResult.success) {
-          console.log('✅ Contribution saved to database');
+          console.log('✅ Contribution saved to database successfully!');
+          console.log('📝 Contribution details:', contributionResult);
           toast.success('Contribution saved successfully!');
           
           // Start monitoring transaction for confirmation
+          console.log('🔄 Starting transaction monitoring for:', result.transactionHash);
           transactionMonitorService.startMonitoring(result.transactionHash);
         } else {
+          console.error('❌ DATABASE SAVE FAILED!');
+          console.error('🔍 Detailed error analysis:');
+          console.error('   - Error message:', contributionResult.error);
+          console.error('   - Project ID:', projectId);
+          console.error('   - User ID:', user.id);
+          console.error('   - Transaction hash:', result.transactionHash);
+          console.error('   - Contribution result object:', contributionResult);
           console.warn('⚠️ Blockchain succeeded but database save failed:', contributionResult.error);
-          toast.error('Transaction succeeded but failed to save to database');
+          toast.error(`Transaction succeeded but failed to save to database: ${contributionResult.error}`);
         }
 
         setTransactionHash(result.transactionHash);

@@ -21,6 +21,7 @@ import { toast } from 'react-hot-toast';
 import { supabase } from '../services/supabase';
 import { blockchainService } from '../services/blockchain';
 import { useAuth } from '../context/AuthContext';
+import TestPinataImageUpload from '../components/test/TestPinataImageUpload';
 
 interface Idea {
   id: string;
@@ -228,6 +229,7 @@ const IdeasPage: React.FC = () => {
     toast.success('Idea liked!');
   };
 
+  // Open the submit modal only if user is signed in
   const handleSubmitIdea = () => {
     if (!user) {
       toast.error('Please sign in to submit an idea');
@@ -244,6 +246,8 @@ const IdeasPage: React.FC = () => {
       return;
     }
 
+
+    // Validate required fields
     if (!formData.title.trim() || !formData.description.trim()) {
       toast.error('Please fill in all required fields');
       return;
@@ -252,7 +256,8 @@ const IdeasPage: React.FC = () => {
     setSubmitting(true);
 
     try {
-      // First create the idea in the database
+
+      // Prepare idea data for Supabase
       const ideaData = {
         title: formData.title.trim(),
         description: formData.description.trim(),
@@ -266,6 +271,7 @@ const IdeasPage: React.FC = () => {
         status: 'published'
       };
 
+      // Insert idea into Supabase
       const { data: createdIdea, error: createError } = await supabase
         .from('ideas')
         .insert(ideaData)
@@ -273,6 +279,7 @@ const IdeasPage: React.FC = () => {
         .single();
 
       if (createError) throw createError;
+
 
       // Register idea on blockchain for ownership verification
       try {
@@ -310,6 +317,7 @@ const IdeasPage: React.FC = () => {
         toast.success('Idea submitted! (Blockchain registration pending)');
       }
 
+
       // Reset form and close modal
       setFormData({
         title: '',
@@ -322,7 +330,7 @@ const IdeasPage: React.FC = () => {
         visibility: 'public'
       });
       setShowSubmitModal(false);
-      
+      toast.success('Your idea has been submitted!');
       // Reload ideas to show the new one
       loadIdeas();
 
@@ -401,6 +409,13 @@ const IdeasPage: React.FC = () => {
             </div>
           </div>
           </div>
+        </div>
+      </div>
+
+      {/* Pinata IPFS Test Component - Temporary */}
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-7xl mx-auto">
+          <TestPinataImageUpload />
         </div>
       </div>
 

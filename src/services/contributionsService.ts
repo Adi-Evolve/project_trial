@@ -43,17 +43,21 @@ class ContributionsService {
     error?: string;
   }> {
     try {
-      console.log('💰 Saving contribution to Supabase:', contribution);
+      console.log('� SAVE CONTRIBUTION - Starting save process...');
+      console.log('📝 Contribution to save:', JSON.stringify(contribution, null, 2));
 
       // Try enhanced service first
+      console.log('🔄 Attempting enhanced service save...');
       try {
         const data = await EnhancedSupabaseService.saveContribution(contribution);
-        console.log('✅ Contribution saved successfully (enhanced):', data);
+        console.log('✅ Enhanced service save successful:', data);
         return { success: true, contribution: data };
       } catch (enhancedError: any) {
-        console.warn('Enhanced service failed, trying direct insert:', enhancedError.message);
+        console.error('❌ Enhanced service failed:', enhancedError.message);
+        console.log('🔄 Falling back to direct Supabase insert...');
         
         // Fallback to direct insert
+        console.log('📤 Making direct insert to contributions table...');
         const { data, error } = await supabase
           .from('contributions')
           .insert([contribution])
@@ -287,19 +291,31 @@ class ContributionsService {
       });
 
       // First, get the project UUID - try by ID first, then by title
+      console.log('🔍 Step 1: Looking up project in database...');
+      console.log('🎯 Project ID to find:', projectId);
+      
       let project = null;
       let projectError = null;
 
       // Try direct UUID lookup first
+      console.log('🔄 Trying direct UUID lookup...');
       const { data: directProject, error: directError } = await supabase
         .from('projects')
         .select('id')
         .eq('id', projectId)
         .single();
 
+      console.log('📊 Direct lookup result:', {
+        found: !!directProject,
+        project: directProject,
+        error: directError?.message
+      });
+
       if (directProject) {
+        console.log('✅ Found project by UUID:', directProject.id);
         project = directProject;
       } else {
+        console.log('❌ Direct UUID lookup failed, trying title lookup...');
         // If direct lookup fails, try by title (for blockchain project IDs)
         const { data: titleProject, error: titleError } = await supabase
           .from('projects')
@@ -307,35 +323,68 @@ class ContributionsService {
           .eq('title', projectId)
           .single();
         
-        project = titleProject;
-        projectError = titleError;
+        console.log('📊 Title lookup result:', {
+          found: !!titleProject,
+          project: titleProject,
+          error: titleError?.message
+        });
+        
+        if (titleProject) {
+          console.log('✅ Found project by title:', titleProject.id);
+          project = titleProject;
+        } else {
+          console.error('❌ Title lookup also failed:', titleError?.message);
+          projectError = titleError;
+        }
       }
 
       if (projectError || !project) {
-        return { success: false, error: 'Project not found' };
+        console.error('❌ PROJECT LOOKUP FAILED COMPLETELY!');
+        console.error('🔍 Debugging info:');
+        console.error('   - Searched project ID:', projectId);
+        console.error('   - Direct error:', directError?.message);
+        console.error('   - Title error:', projectError?.message);
+        console.error('   - Project found:', !!project);
+        return { success: false, error: `Project not found: ${projectId}` };
       }
 
       // Handle contributor ID - if it's a wallet address, try to find user or use null
+      console.log('🔍 Step 2: Processing contributor ID...');
+      console.log('👤 Original contributor ID:', contributorId);
+      
       let finalContributorId: string | null = contributorId;
       
       // Check if contributorId looks like a wallet address (starts with 0x)
       if (contributorId && contributorId.startsWith('0x')) {
+        console.log('🔄 Contributor ID is a wallet address, looking up user...');
         // Try to find user by wallet address
-        const { data: userByWallet } = await supabase
+        const { data: userByWallet, error: walletError } = await supabase
           .from('users')
           .select('id')
           .eq('wallet_address', contributorId)
           .single();
           
+        console.log('📊 Wallet lookup result:', {
+          found: !!userByWallet,
+          userId: userByWallet?.id,
+          error: walletError?.message
+        });
+          
         if (userByWallet) {
+          console.log('✅ Found user for wallet:', userByWallet.id);
           finalContributorId = userByWallet.id;
         } else {
-          // If no user found with this wallet, allow anonymous contribution
+          console.log('⚠️ No user found for wallet, using anonymous contribution');
           finalContributorId = null;
         }
+      } else {
+        console.log('✅ Contributor ID is already a UUID:', contributorId);
       }
+      
+      console.log('👤 Final contributor ID:', finalContributorId);
 
       // Save the contribution
+      console.log('🔍 Step 3: Preparing contribution data...');
       const contributionData: Omit<ContributionData, 'id' | 'created_at'> = {
         project_id: project.id,
         contributor_id: finalContributorId,
@@ -347,11 +396,20 @@ class ContributionsService {
         is_anonymous: isAnonymous || false
       };
 
+      console.log('📝 Contribution data to save:', contributionData);
+      console.log('🔄 Calling saveContribution...');
+
       const saveResult = await this.saveContribution(contributionData);
       
+      console.log('📊 Save contribution result:', saveResult);
+      
       if (!saveResult.success) {
+        console.error('❌ CONTRIBUTION SAVE FAILED!');
+        console.error('🔍 Save error details:', saveResult.error);
         return saveResult;
       }
+      
+      console.log('✅ Contribution saved successfully:', saveResult.contribution?.id);
 
       // Update project totals
       await this.updateProjectTotals(project.id);

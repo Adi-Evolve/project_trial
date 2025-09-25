@@ -55,34 +55,64 @@ class TransactionService {
    */
   async saveTransaction(transactionData: TransactionData): Promise<{ success: boolean; id?: string; error?: string }> {
     try {
+      console.log('🔗 SAVE TRANSACTION - Starting transaction save...');
+      console.log('📝 Transaction data to save:', JSON.stringify(transactionData, null, 2));
+      
+      const transactionRecord = {
+        tx_hash: transactionData.txHash,
+        from_address: transactionData.fromAddress,
+        to_address: transactionData.toAddress,
+        value: parseFloat(transactionData.amount),
+        gas_used: transactionData.gasUsed,
+        gas_price: transactionData.gasPrice ? parseFloat(transactionData.gasPrice) : null,
+        block_number: transactionData.blockNumber,
+        block_hash: transactionData.blockHash,
+        status: transactionData.status,
+        transaction_index: transactionData.transactionIndex,
+        contract_address: transactionData.contractAddress,
+        logs: transactionData.logs || [],
+        confirmed_at: transactionData.status === 'confirmed' ? new Date().toISOString() : null
+      };
+      
+      console.log('📤 Inserting transaction record:', JSON.stringify(transactionRecord, null, 2));
+      
       const { data, error } = await supabase
         .from('blockchain_transactions')
-        .insert([{
-          tx_hash: transactionData.txHash,
-          from_address: transactionData.fromAddress,
-          to_address: transactionData.toAddress,
-          value: parseFloat(transactionData.amount),
-          gas_used: transactionData.gasUsed,
-          gas_price: transactionData.gasPrice ? parseFloat(transactionData.gasPrice) : null,
-          block_number: transactionData.blockNumber,
-          block_hash: transactionData.blockHash,
-          status: transactionData.status,
-          transaction_index: transactionData.transactionIndex,
-          contract_address: transactionData.contractAddress,
-          logs: transactionData.logs || [],
-          confirmed_at: transactionData.status === 'confirmed' ? new Date().toISOString() : null
-        }])
+        .insert([transactionRecord])
         .select()
         .single();
 
+      console.log('📊 Transaction insert result:', {
+        success: !error,
+        data: data,
+        error: error ? {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        } : null
+      });
+
       if (error) {
-        console.error('Failed to save transaction:', error);
+        console.error('❌ TRANSACTION SAVE FAILED!');
+        console.error('🔍 Error analysis:');
+        console.error('   - Code:', error.code);
+        console.error('   - Message:', error.message);
+        console.error('   - Details:', error.details);
+        console.error('   - Hint:', error.hint);
+        console.error('   - Full error object:', error);
         return { success: false, error: error.message };
       }
 
+      console.log('✅ Transaction saved successfully:', data.id);
       return { success: true, id: data.id };
     } catch (error: any) {
-      console.error('Failed to save transaction:', error);
+      console.error('❌ TRANSACTION SAVE EXCEPTION:', error);
+      console.error('🔍 Exception details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
       return { success: false, error: error.message };
     }
   }

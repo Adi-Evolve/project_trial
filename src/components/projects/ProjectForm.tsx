@@ -136,6 +136,24 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ onClose, onSuccess }) => {
 
     setLoading(true);
     try {
+      // Upload images to Pinata IPFS
+      const { ipfsService } = require('../../services/ipfsService');
+      let imageUrls: string[] = [];
+      if (formData.images.length > 0) {
+        for (const file of formData.images) {
+          const result = await ipfsService.uploadFile(file, {
+            name: file.name,
+            type: 'project_image',
+            uploadedBy: user.walletAddress || user.id || ''
+          });
+          if (result.success && result.ipfsHash) {
+            imageUrls.push(ipfsService.getFileUrl(result.ipfsHash));
+          } else {
+            toast.error(`Failed to upload image: ${file.name}`);
+          }
+        }
+      }
+
       // Create project metadata
       const projectData: any = {
         id: `project_${Date.now()}_${user.id}`,
@@ -147,6 +165,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ onClose, onSuccess }) => {
         deadline: formData.deadline,
         teamSize: formData.teamSize,
         skillsNeeded: formData.skillsNeeded,
+        images: imageUrls,
         createdBy: user.id,
         createdAt: new Date().toISOString(),
         status: 'active',

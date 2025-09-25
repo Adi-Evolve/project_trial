@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   UserCircleIcon,
@@ -39,10 +39,14 @@ import {
   CheckCircleIcon
 } from '@heroicons/react/24/solid';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../services/supabase';
 
 const ProfilePage: React.FC = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState({
     email: true,
     push: true,
@@ -70,208 +74,91 @@ const ProfilePage: React.FC = () => {
     education: ''
   });
 
-  // Mock user data - this would come from your auth context or API
-  const user = {
-    id: '1',
-    username: 'john_creator',
-    fullName: 'John Smith',
-    email: 'john@example.com',
-    phone: '+1 (555) 123-4567',
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-    bio: 'Full-stack developer passionate about creating innovative solutions. Love working on AI/ML projects and building scalable web applications.',
-    location: 'San Francisco, CA',
-    website: 'https://johnsmith.dev',
-    company: 'TechCorp Inc.',
-    education: 'Stanford University - Computer Science',
-    joinedDate: '2023-01-15',
-    coverPhoto: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1200&h=400&fit=crop',
-    skills: [
-      { name: 'React', level: 90 },
-      { name: 'TypeScript', level: 85 },
-      { name: 'Node.js', level: 80 },
-      { name: 'Python', level: 75 },
-      { name: 'Machine Learning', level: 70 },
-      { name: 'UI/UX Design', level: 65 }
-    ],
-    socialLinks: [
-      { platform: 'GitHub', url: 'https://github.com/johnsmith', username: 'johnsmith' },
-      { platform: 'LinkedIn', url: 'https://linkedin.com/in/johnsmith', username: 'johnsmith' },
-      { platform: 'Twitter', url: 'https://twitter.com/johnsmith', username: '@johnsmith' }
-    ],
-    stats: {
-      projectsCreated: 12,
-      ideasShared: 28,
-      upvotesReceived: 1247,
-      followers: 342,
-      following: 156,
-      reputation: 4856,
-      totalViews: 15420,
-      collaborations: 23
-    },
-    badges: [
-      { name: 'Early Adopter', icon: '🚀', description: 'Joined in the first month', earned: '2023-01-15' },
-      { name: 'Idea Machine', icon: '💡', description: 'Shared 25+ ideas', earned: '2023-03-20' },
-      { name: 'Community Favorite', icon: '❤️', description: '1000+ upvotes received', earned: '2023-06-15' },
-      { name: 'Collaborator', icon: '🤝', description: 'Joined 10+ projects', earned: '2023-08-10' },
-      { name: 'Mentor', icon: '🎓', description: 'Helped 50+ developers', earned: '2023-09-01' },
-      { name: 'Open Source Hero', icon: '⭐', description: 'Contributed to 10+ repos', earned: '2023-09-15' }
-    ]
+  // Real user data from Supabase
+  const [userData, setUserData] = useState<any>(null);
+  const [userProjects, setUserProjects] = useState<any[]>([]);
+  const [bookmarkedProjects, setBookmarkedProjects] = useState<any[]>([]);
+  const [userNotificationsData, setUserNotificationsData] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+
+  // Load user data from Supabase
+  useEffect(() => {
+    if (user) {
+      loadUserProfile();
+    }
+  }, [user]);
+
+  const loadUserProfile = async () => {
+    try {
+      setLoading(true);
+
+      // Load user profile data
+      const { data: userProfile, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('wallet_address', user?.walletAddress)
+        .single();
+
+      if (userError && userError.code !== 'PGRST116') {
+        console.error('Error loading user profile:', userError);
+        toast.error('Failed to load user profile');
+        return;
+      }
+
+      if (userProfile) {
+        setUserData(userProfile);
+        setFormData({
+          fullName: userProfile.full_name || '',
+          username: userProfile.username || '',
+          email: userProfile.email || '',
+          phone: '',
+          bio: userProfile.bio || '',
+          location: userProfile.location || '',
+          website: userProfile.website || '',
+          company: userProfile.role || '',
+          education: ''
+        });
+      }
+
+      // Load user's projects
+      const { data: projects, error: projectsError } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('creator_id', userProfile?.id || user?.id)
+        .order('created_at', { ascending: false });
+
+      if (projectsError) {
+        console.error('Error loading user projects:', projectsError);
+      } else {
+        setUserProjects(projects || []);
+      }
+
+      // Load user's bookmarked projects (if bookmarks table exists)
+      // For now, we'll use empty array
+      setBookmarkedProjects([]);
+
+      // Load user's notifications (if notifications table exists)
+      // For now, we'll use empty array
+      setUserNotificationsData([]);
+
+      // Load recent activity (if activity table exists)
+      // For now, we'll use empty array
+      setRecentActivity([]);
+
+    } catch (error) {
+      console.error('Error loading profile data:', error);
+      toast.error('Failed to load profile data');
+    } finally {
+      setLoading(false);
+    }
   };
-
-  const myProjects = [
-    {
-      id: '1',
-      title: 'AI Code Assistant',
-      description: 'An intelligent coding assistant powered by machine learning',
-      category: 'AI/ML',
-      status: 'Active',
-      upvotes: 234,
-      comments: 45,
-      views: 1250,
-      image: 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=300&h=200&fit=crop'
-    },
-    {
-      id: '2',
-      title: 'Sustainable Energy Tracker',
-      description: 'Mobile app for tracking renewable energy consumption',
-      category: 'Environment',
-      status: 'Completed',
-      upvotes: 189,
-      comments: 32,
-      views: 890,
-      image: 'https://images.unsplash.com/photo-1466611653911-95081537e5b7?w=300&h=200&fit=crop'
-    },
-    {
-      id: '3',
-      title: 'Local Community Hub',
-      description: 'Platform connecting neighbors for local services and events',
-      category: 'Social',
-      status: 'In Progress',
-      upvotes: 156,
-      comments: 28,
-      views: 675,
-      image: 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=300&h=200&fit=crop'
-    }
-  ];
-
-  const bookmarkedProjects = [
-    {
-      id: '4',
-      title: 'Quantum Computing Simulator',
-      description: 'Educational tool for understanding quantum computing principles',
-      category: 'Education',
-      author: 'Dr. Alice Chen',
-      upvotes: 892,
-      bookmarkedAt: '2023-09-10',
-      image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=300&h=200&fit=crop'
-    },
-    {
-      id: '5',
-      title: 'Climate Data Visualization',
-      description: 'Interactive dashboard for climate change data',
-      category: 'Environment',
-      author: 'Green Tech Team',
-      upvotes: 567,
-      bookmarkedAt: '2023-09-08',
-      image: 'https://images.unsplash.com/photo-1611273426858-450d8e3c9fce?w=300&h=200&fit=crop'
-    },
-    {
-      id: '6',
-      title: 'Blockchain Voting System',
-      description: 'Secure and transparent voting using blockchain technology',
-      category: 'Blockchain',
-      author: 'CryptoVote',
-      upvotes: 734,
-      bookmarkedAt: '2023-09-05',
-      image: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=300&h=200&fit=crop'
-    }
-  ];
-
-  const userNotifications = [
-    {
-      id: '1',
-      type: 'project_liked',
-      title: 'Your project received a new like',
-      message: 'Sarah Chen liked "AI Code Assistant"',
-      time: '2 hours ago',
-      read: false,
-      avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b1c7?w=40&h=40&fit=crop&crop=face'
-    },
-    {
-      id: '2',
-      type: 'follower',
-      title: 'New follower',
-      message: 'Emma Davis started following you',
-      time: '5 hours ago',
-      read: false,
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=40&h=40&fit=crop&crop=face'
-    },
-    {
-      id: '3',
-      type: 'comment',
-      title: 'New comment on your project',
-      message: 'Mike Johnson commented on "Sustainable Energy Tracker"',
-      time: '1 day ago',
-      read: true,
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=40&h=40&fit=crop&crop=face'
-    },
-    {
-      id: '4',
-      type: 'badge',
-      title: 'Achievement unlocked!',
-      message: 'You earned the "Open Source Hero" badge',
-      time: '2 days ago',
-      read: true,
-      avatar: null
-    },
-    {
-      id: '5',
-      type: 'collaboration',
-      title: 'Collaboration invitation',
-      message: 'TechCorp invited you to join "Smart City Platform"',
-      time: '3 days ago',
-      read: true,
-      avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=40&h=40&fit=crop'
-    }
-  ];
-
-  const recentActivity = [
-    {
-      type: 'project_liked',
-      user: 'Sarah Chen',
-      target: 'AI Code Assistant',
-      time: '2 hours ago',
-      avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b1c7?w=40&h=40&fit=crop&crop=face'
-    },
-    {
-      type: 'comment',
-      user: 'Mike Johnson',
-      target: 'Sustainable Energy Tracker',
-      comment: 'This is exactly what we need for our office!',
-      time: '5 hours ago',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=40&h=40&fit=crop&crop=face'
-    },
-    {
-      type: 'follow',
-      user: 'Emma Davis',
-      time: '1 day ago',
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=40&h=40&fit=crop&crop=face'
-    },
-    {
-      type: 'project_shared',
-      user: 'Alex Rodriguez',
-      target: 'Local Community Hub',
-      time: '2 days ago',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=40&h=40&fit=crop&crop=face'
-    }
-  ];
 
   const tabs = [
     { id: 'overview', name: 'Overview', count: null, icon: ChartBarIcon },
-    { id: 'projects', name: 'Projects', count: user.stats.projectsCreated, icon: FolderIcon },
+    { id: 'projects', name: 'Projects', count: userProjects.length, icon: FolderIcon },
     { id: 'bookmarks', name: 'Bookmarks', count: bookmarkedProjects.length, icon: BookmarkIcon },
     { id: 'activity', name: 'Activity', count: null, icon: ClockIcon },
-    { id: 'notifications', name: 'Notifications', count: userNotifications.filter(n => !n.read).length, icon: BellIcon },
+    { id: 'notifications', name: 'Notifications', count: userNotificationsData.filter((n: any) => !n.read).length, icon: BellIcon },
     { id: 'settings', name: 'Settings', count: null, icon: Cog6ToothIcon }
   ];
 
@@ -325,15 +212,15 @@ const ProfilePage: React.FC = () => {
 
   const handleStartEditing = () => {
     setFormData({
-      fullName: user.fullName,
-      username: user.username,
-      email: user.email,
-      phone: user.phone,
-      bio: user.bio,
-      location: user.location,
-      website: user.website,
-      company: user.company,
-      education: user.education
+      fullName: user?.fullName || user?.name || userData?.full_name || '',
+      username: user?.username || userData?.username || '',
+      email: user?.email || userData?.email || '',
+      phone: '',
+      bio: user?.bio || userData?.bio || '',
+      location: '',
+      website: '',
+      company: userData?.role || '',
+      education: ''
     });
     setIsEditing(true);
   };
@@ -360,9 +247,9 @@ const ProfilePage: React.FC = () => {
           <div className="relative">
             {/* Cover Photo */}
             <div className="h-48 bg-gradient-to-r from-primary-500 via-purple-500 to-pink-500 rounded-xl mb-6 relative overflow-hidden">
-              {user.coverPhoto && (
+              {userData?.cover_photo && (
                 <img
-                  src={user.coverPhoto}
+                  src={userData.cover_photo}
                   alt="Cover"
                   className="w-full h-full object-cover"
                 />
@@ -378,8 +265,8 @@ const ProfilePage: React.FC = () => {
               {/* Avatar */}
               <div className="relative mb-4 md:mb-0">
                 <img
-                  src={user.avatar}
-                  alt={user.fullName}
+                  src={userData?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face'}
+                  alt={userData?.full_name || 'User'}
                   className="w-32 h-32 rounded-2xl border-4 border-white shadow-xl object-cover"
                 />
                 <button className="absolute bottom-2 right-2 p-2 rounded-lg bg-primary-500 hover:bg-primary-600 transition-colors shadow-lg">
@@ -391,8 +278,8 @@ const ProfilePage: React.FC = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h1 className="text-3xl font-bold text-white mb-2">{user.fullName}</h1>
-                    <p className="text-lg text-secondary-300">@{user.username}</p>
+                    <h1 className="text-3xl font-bold text-white mb-2">{userData?.full_name || 'Loading...'}</h1>
+                    <p className="text-lg text-secondary-300">@{userData?.username || userData?.wallet_address?.slice(0, 10) + '...'}</p>
                   </div>
                   <div className="mt-4 sm:mt-0 flex space-x-3">
                     <motion.button
@@ -408,40 +295,54 @@ const ProfilePage: React.FC = () => {
                 </div>
 
                 {/* Bio */}
-                <p className="mt-4 text-secondary-200 max-w-2xl">{user.bio}</p>
+                <p className="mt-4 text-secondary-200 max-w-2xl">{userData?.bio || 'No bio available'}</p>
 
                 {/* Quick Info */}
                 <div className="mt-4 flex flex-wrap gap-4 text-sm text-secondary-300">
-                  <div className="flex items-center space-x-1">
-                    <MapPinIcon className="w-4 h-4" />
-                    <span>{user.location}</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <LinkIcon className="w-4 h-4" />
-                    <a href={user.website} className="text-primary-400 hover:text-primary-300">
-                      {user.website}
-                    </a>
-                  </div>
+                  {userData?.location && (
+                    <div className="flex items-center space-x-1">
+                      <MapPinIcon className="w-4 h-4" />
+                      <span>{userData.location}</span>
+                    </div>
+                  )}
+                  {userData?.website && (
+                    <div className="flex items-center space-x-1">
+                      <LinkIcon className="w-4 h-4" />
+                      <a href={userData.website} className="text-primary-400 hover:text-primary-300">
+                        {userData.website}
+                      </a>
+                    </div>
+                  )}
                   <div className="flex items-center space-x-1">
                     <CalendarDaysIcon className="w-4 h-4" />
-                    <span>Joined {new Date(user.joinedDate).toLocaleDateString()}</span>
+                    <span>Joined {userData?.created_at ? new Date(userData.created_at).toLocaleDateString() : 'Recently'}</span>
                   </div>
                 </div>
 
-                {/* Social Links */}
+                {/* Social Links - placeholder for now */}
                 <div className="mt-3 flex space-x-3">
-                  {user.socialLinks.map((link, index) => (
+                  {userData?.github_profile && (
                     <a
-                      key={index}
-                      href={link.url}
+                      href={userData.github_profile}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-secondary-400 hover:text-primary-400 transition-colors"
-                      title={`${link.platform}: ${link.username}`}
+                      title="GitHub"
                     >
-                      <span className="text-sm">{link.platform}</span>
+                      <span className="text-sm">GitHub</span>
                     </a>
-                  ))}
+                  )}
+                  {userData?.linkedin_profile && (
+                    <a
+                      href={userData.linkedin_profile}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-secondary-400 hover:text-primary-400 transition-colors"
+                      title="LinkedIn"
+                    >
+                      <span className="text-sm">LinkedIn</span>
+                    </a>
+                  )}
                 </div>
               </div>
             </div>
@@ -456,14 +357,14 @@ const ProfilePage: React.FC = () => {
           className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8"
         >
           {[
-            { label: 'Projects', value: user.stats.projectsCreated, icon: TrophyIcon, color: 'text-blue-400' },
-            { label: 'Ideas', value: user.stats.ideasShared, icon: FireIcon, color: 'text-orange-400' },
-            { label: 'Upvotes', value: user.stats.upvotesReceived.toLocaleString(), icon: HeartIcon, color: 'text-red-400' },
-            { label: 'Followers', value: user.stats.followers, icon: UsersIcon, color: 'text-green-400' },
-            { label: 'Following', value: user.stats.following, icon: UserCircleIcon, color: 'text-purple-400' },
-            { label: 'Reputation', value: user.stats.reputation.toLocaleString(), icon: StarIcon, color: 'text-yellow-400' },
-            { label: 'Views', value: user.stats.totalViews.toLocaleString(), icon: EyeIcon, color: 'text-indigo-400' },
-            { label: 'Collaborations', value: user.stats.collaborations, icon: UsersIcon, color: 'text-pink-400' }
+            { label: 'Projects', value: userProjects.length, icon: TrophyIcon, color: 'text-blue-400' },
+            { label: 'Ideas', value: 0, icon: FireIcon, color: 'text-orange-400' }, // TODO: Add ideas count
+            { label: 'Upvotes', value: userProjects.reduce((sum, p) => sum + (p.like_count || 0), 0), icon: HeartIcon, color: 'text-red-400' },
+            { label: 'Followers', value: 0, icon: UsersIcon, color: 'text-green-400' }, // TODO: Add followers count
+            { label: 'Following', value: 0, icon: UserCircleIcon, color: 'text-purple-400' }, // TODO: Add following count
+            { label: 'Reputation', value: userData?.reputation || 0, icon: StarIcon, color: 'text-yellow-400' },
+            { label: 'Views', value: userProjects.reduce((sum, p) => sum + (p.view_count || 0), 0), icon: EyeIcon, color: 'text-indigo-400' },
+            { label: 'Collaborations', value: 0, icon: UsersIcon, color: 'text-pink-400' } // TODO: Add collaborations count
           ].map((stat) => (
             <motion.div
               key={stat.label}
@@ -486,27 +387,11 @@ const ProfilePage: React.FC = () => {
         >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white">Achievements</h2>
-            <span className="text-sm text-secondary-400">{user.badges.length} badges earned</span>
+            <span className="text-sm text-secondary-400">0 badges earned</span> {/* TODO: Add badges system */}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {user.badges.map((badge, index) => (
-              <motion.div
-                key={badge.name}
-                whileHover={{ scale: 1.05 }}
-                className="glass-light rounded-lg p-4 relative"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="text-3xl">{badge.icon}</div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-white mb-1">{badge.name}</h3>
-                    <p className="text-sm text-secondary-400 mb-1">{badge.description}</p>
-                    <span className="text-xs text-secondary-500">
-                      Earned {new Date(badge.earned).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+          <div className="text-center py-8 text-secondary-400">
+            <TrophyIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p>No achievements yet. Start creating projects to earn badges!</p>
           </div>
         </motion.div>
 
@@ -550,72 +435,88 @@ const ProfilePage: React.FC = () => {
         >
           {activeTab === 'overview' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Recent Projects */}
-              <div className="lg:col-span-2 space-y-6">
-                <div className="glass rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">Recent Projects</h3>
-                  <div className="space-y-4">
-                    {myProjects.slice(0, 3).map((project) => (
-                      <motion.div
-                        key={project.id}
-                        whileHover={{ scale: 1.02 }}
-                        className="glass-light rounded-lg p-4 flex items-center space-x-4"
-                      >
-                        <img
-                          src={project.image}
-                          alt={project.title}
-                          className="w-16 h-16 rounded-lg object-cover"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-white truncate">{project.title}</h4>
-                          <p className="text-sm text-secondary-400 line-clamp-2">{project.description}</p>
-                          <div className="flex items-center space-x-4 mt-2 text-xs text-secondary-500">
-                            <span className="flex items-center space-x-1">
-                              <HeartIcon className="w-3 h-3" />
-                              <span>{project.upvotes}</span>
-                            </span>
-                            <span className="flex items-center space-x-1">
-                              <ChatBubbleLeftIcon className="w-3 h-3" />
-                              <span>{project.comments}</span>
-                            </span>
-                            <span className="flex items-center space-x-1">
-                              <EyeIcon className="w-3 h-3" />
-                              <span>{project.views}</span>
-                            </span>
+                {/* Recent Projects */}
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="glass rounded-xl p-6">
+                    <h3 className="text-lg font-semibold text-white mb-4">Recent Projects</h3>
+                    <div className="space-y-4">
+                      {userProjects.slice(0, 3).map((project) => (
+                        <motion.div
+                          key={project.id}
+                          whileHover={{ scale: 1.02 }}
+                          className="glass-light rounded-lg p-4 flex items-center space-x-4"
+                        >
+                          <img
+                            src={project.image_url || 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=300&h=200&fit=crop'}
+                            alt={project.title}
+                            className="w-16 h-16 rounded-lg object-cover"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-white truncate">{project.title}</h4>
+                            <p className="text-sm text-secondary-400 line-clamp-2">{project.description}</p>
+                            <div className="flex items-center space-x-4 mt-2 text-xs text-secondary-500">
+                              <span className="flex items-center space-x-1">
+                                <HeartIcon className="w-3 h-3" />
+                                <span>{project.like_count || 0}</span>
+                              </span>
+                              <span className="flex items-center space-x-1">
+                                <ChatBubbleLeftIcon className="w-3 h-3" />
+                                <span>{project.comment_count || 0}</span>
+                              </span>
+                              <span className="flex items-center space-x-1">
+                                <EyeIcon className="w-3 h-3" />
+                                <span>{project.view_count || 0}</span>
+                              </span>
+                            </div>
                           </div>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            project.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                            project.status === 'funded' ? 'bg-blue-500/20 text-blue-400' :
+                            'bg-yellow-500/20 text-yellow-400'
+                          }`}>
+                            {project.status}
+                          </span>
+                        </motion.div>
+                      ))}
+                      {userProjects.length === 0 && (
+                        <div className="text-center py-8 text-secondary-400">
+                          <FolderIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                          <p>No projects yet. Create your first project!</p>
                         </div>
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          project.status === 'Active' ? 'bg-green-500/20 text-green-400' :
-                          project.status === 'Completed' ? 'bg-blue-500/20 text-blue-400' :
-                          'bg-yellow-500/20 text-yellow-400'
-                        }`}>
-                          {project.status}
-                        </span>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Skills */}
+                      )}
+                    </div>
+                  </div>                {/* Skills */}
                 <div className="glass rounded-xl p-6">
                   <h3 className="text-lg font-semibold text-white mb-4">Skills & Expertise</h3>
                   <div className="space-y-4">
-                    {user.skills.map((skill, index) => (
-                      <div key={index} className="flex items-center justify-between">
-                        <span className="text-secondary-300 font-medium">{skill.name}</span>
-                        <div className="flex items-center space-x-3">
-                          <div className="w-32 bg-secondary-700 rounded-full h-2">
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${skill.level}%` }}
-                              transition={{ duration: 1, delay: index * 0.1 }}
-                              className="bg-gradient-to-r from-primary-500 to-purple-500 h-2 rounded-full"
-                            />
+                    {user && user.skills && user.skills.length > 0 ? (
+                      user.skills.map((skill, index) => (
+                        <div key={index} className="flex items-center justify-between">
+                          <span className="text-secondary-300 font-medium">{skill}</span>
+                          <div className="flex items-center space-x-3">
+                            <div className="w-32 bg-secondary-700 rounded-full h-2">
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${75}%` }}
+                                transition={{ duration: 1, delay: index * 0.1 }}
+                                className="bg-gradient-to-r from-primary-500 to-purple-500 h-2 rounded-full"
+                              />
+                            </div>
+                            <span className="text-secondary-400 text-sm w-8">75%</span>
                           </div>
-                          <span className="text-secondary-400 text-sm w-8">{skill.level}%</span>
                         </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="text-secondary-400 mb-2">
+                          <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                        </div>
+                        <p className="text-secondary-400">Skills data will be available soon</p>
+                        <p className="text-sm text-secondary-500 mt-1">Complete your profile to showcase your expertise</p>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               </div>
@@ -624,22 +525,34 @@ const ProfilePage: React.FC = () => {
               <div className="glass rounded-xl p-6">
                 <h3 className="text-lg font-semibold text-white mb-4">Recent Activity</h3>
                 <div className="space-y-4">
-                  {recentActivity.slice(0, 5).map((activity, index) => (
-                    <div key={index} className="flex items-start space-x-3">
-                      <img
-                        src={activity.avatar}
-                        alt={activity.user}
-                        className="w-8 h-8 rounded-full object-cover"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2 mb-1">
-                          {getActivityIcon(activity.type)}
-                          <span className="text-xs text-secondary-500">{activity.time}</span>
+                  {recentActivity && recentActivity.length > 0 ? (
+                    recentActivity.slice(0, 5).map((activity, index) => (
+                      <div key={index} className="flex items-start space-x-3">
+                        <img
+                          src={activity.avatar}
+                          alt={activity.user}
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2 mb-1">
+                            {getActivityIcon(activity.type)}
+                            <span className="text-xs text-secondary-500">{activity.time}</span>
+                          </div>
+                          <p className="text-sm text-secondary-300">{getActivityText(activity)}</p>
                         </div>
-                        <p className="text-sm text-secondary-300">{getActivityText(activity)}</p>
                       </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <div className="text-secondary-400 mb-2">
+                        <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <p className="text-secondary-400">No recent activity</p>
+                      <p className="text-sm text-secondary-500 mt-1">Your activity will appear here as you use the platform</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>
@@ -647,49 +560,67 @@ const ProfilePage: React.FC = () => {
 
           {activeTab === 'projects' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {myProjects.map((project) => (
-                <motion.div
-                  key={project.id}
-                  whileHover={{ scale: 1.05 }}
-                  className="glass rounded-xl overflow-hidden"
-                >
-                  <img
-                    src={project.image}
-                    alt={project.title}
-                    className="w-full h-48 object-cover"
-                  />
-                  <div className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-primary-400">{project.category}</span>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        project.status === 'Active' ? 'bg-green-500/20 text-green-400' :
-                        project.status === 'Completed' ? 'bg-blue-500/20 text-blue-400' :
-                        'bg-yellow-500/20 text-yellow-400'
-                      }`}>
-                        {project.status}
-                      </span>
-                    </div>
-                    <h3 className="text-lg font-semibold text-white mb-2">{project.title}</h3>
-                    <p className="text-secondary-400 mb-4 line-clamp-2">{project.description}</p>
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center space-x-4 text-secondary-500">
-                        <span className="flex items-center space-x-1">
-                          <HeartIcon className="w-4 h-4" />
-                          <span>{project.upvotes}</span>
-                        </span>
-                        <span className="flex items-center space-x-1">
-                          <ChatBubbleLeftIcon className="w-4 h-4" />
-                          <span>{project.comments}</span>
-                        </span>
-                        <span className="flex items-center space-x-1">
-                          <EyeIcon className="w-4 h-4" />
-                          <span>{project.views}</span>
+              {userProjects && userProjects.length > 0 ? (
+                userProjects.map((project) => (
+                  <motion.div
+                    key={project.id}
+                    whileHover={{ scale: 1.05 }}
+                    className="glass rounded-xl overflow-hidden"
+                  >
+                    <img
+                      src={project.image_url || 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=300&h=200&fit=crop'}
+                      alt={project.title}
+                      className="w-full h-48 object-cover"
+                    />
+                    <div className="p-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-primary-400">{project.category || 'Project'}</span>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          project.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                          project.status === 'funded' ? 'bg-blue-500/20 text-blue-400' :
+                          'bg-yellow-500/20 text-yellow-400'
+                        }`}>
+                          {project.status || 'Draft'}
                         </span>
                       </div>
+                      <h3 className="text-lg font-semibold text-white mb-2">{project.title}</h3>
+                      <p className="text-secondary-400 mb-4 line-clamp-2">{project.description}</p>
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center space-x-4 text-secondary-500">
+                          <span className="flex items-center space-x-1">
+                            <HeartIcon className="w-4 h-4" />
+                            <span>{project.like_count || 0}</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <ChatBubbleLeftIcon className="w-4 h-4" />
+                            <span>{project.comment_count || 0}</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <EyeIcon className="w-4 h-4" />
+                            <span>{project.view_count || 0}</span>
+                          </span>
+                        </div>
+                      </div>
                     </div>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="col-span-full text-center py-12">
+                  <div className="text-secondary-400 mb-4">
+                    <FolderIcon className="w-16 h-16 mx-auto opacity-50" />
                   </div>
-                </motion.div>
-              ))}
+                  <h3 className="text-lg font-semibold text-white mb-2">No projects yet</h3>
+                  <p className="text-secondary-400 mb-4">Create your first project to get started</p>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => window.location.href = '/create-project'}
+                    className="btn-primary"
+                  >
+                    Create Project
+                  </motion.button>
+                </div>
+              )}
             </div>
           )}
 
@@ -699,66 +630,104 @@ const ProfilePage: React.FC = () => {
                 <h3 className="text-lg font-semibold text-white">Bookmarked Projects</h3>
                 <span className="text-sm text-secondary-400">{bookmarkedProjects.length} projects saved</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {bookmarkedProjects.map((project) => (
-                  <motion.div
-                    key={project.id}
-                    whileHover={{ scale: 1.05 }}
-                    className="glass-light rounded-xl overflow-hidden"
-                  >
-                    <img
-                      src={project.image}
-                      alt={project.title}
-                      className="w-full h-48 object-cover"
-                    />
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-primary-400">{project.category}</span>
-                        <button className="text-yellow-400 hover:text-yellow-300">
-                          <BookmarkIcon className="w-4 h-4 fill-current" />
-                        </button>
-                      </div>
-                      <h3 className="text-lg font-semibold text-white mb-2">{project.title}</h3>
-                      <p className="text-secondary-400 mb-3 line-clamp-2">{project.description}</p>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-secondary-500">by {project.author}</span>
-                        <div className="flex items-center space-x-1 text-secondary-500">
-                          <HeartIcon className="w-4 h-4" />
-                          <span>{project.upvotes}</span>
+              {bookmarkedProjects && bookmarkedProjects.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {bookmarkedProjects.map((project) => (
+                    <motion.div
+                      key={project.id}
+                      whileHover={{ scale: 1.05 }}
+                      className="glass-light rounded-xl overflow-hidden"
+                    >
+                      <img
+                        src={project.image}
+                        alt={project.title}
+                        className="w-full h-48 object-cover"
+                      />
+                      <div className="p-6">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-primary-400">{project.category}</span>
+                          <button className="text-yellow-400 hover:text-yellow-300">
+                            <BookmarkIcon className="w-4 h-4 fill-current" />
+                          </button>
+                        </div>
+                        <h3 className="text-lg font-semibold text-white mb-2">{project.title}</h3>
+                        <p className="text-secondary-400 mb-3 line-clamp-2">{project.description}</p>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-secondary-500">by {project.author}</span>
+                          <div className="flex items-center space-x-1 text-secondary-500">
+                            <HeartIcon className="w-4 h-4" />
+                            <span>{project.upvotes}</span>
+                          </div>
+                        </div>
+                        <div className="mt-3 text-xs text-secondary-500">
+                          Saved {new Date(project.bookmarkedAt).toLocaleDateString()}
                         </div>
                       </div>
-                      <div className="mt-3 text-xs text-secondary-500">
-                        Saved {new Date(project.bookmarkedAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="text-secondary-400 mb-4">
+                    <BookmarkIcon className="w-16 h-16 mx-auto opacity-50" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">No bookmarked projects yet</h3>
+                  <p className="text-secondary-400 mb-4">Start exploring projects and save the ones you like</p>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setActiveTab('projects')}
+                    className="btn-primary"
+                  >
+                    Browse Projects
+                  </motion.button>
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'activity' && (
             <div className="glass rounded-xl p-6">
               <h3 className="text-lg font-semibold text-white mb-6">All Activity</h3>
-              <div className="space-y-6">
-                {recentActivity.map((activity, index) => (
-                  <div key={index} className="flex items-start space-x-4 p-4 glass-light rounded-lg">
-                    <img
-                      src={activity.avatar}
-                      alt={activity.user}
-                      className="w-12 h-12 rounded-full object-cover"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-3 mb-2">
-                        {getActivityIcon(activity.type)}
-                        <span className="font-medium text-white">{activity.user}</span>
-                        <span className="text-sm text-secondary-500">{activity.time}</span>
+              {recentActivity && recentActivity.length > 0 ? (
+                <div className="space-y-6">
+                  {recentActivity.map((activity, index) => (
+                    <div key={index} className="flex items-start space-x-4 p-4 glass-light rounded-lg">
+                      <img
+                        src={activity.avatar}
+                        alt={activity.user}
+                        className="w-12 h-12 rounded-full object-cover"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-3 mb-2">
+                          {getActivityIcon(activity.type)}
+                          <span className="font-medium text-white">{activity.user}</span>
+                          <span className="text-sm text-secondary-500">{activity.time}</span>
+                        </div>
+                        <p className="text-secondary-300">{getActivityText(activity)}</p>
                       </div>
-                      <p className="text-secondary-300">{getActivityText(activity)}</p>
                     </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="text-secondary-400 mb-4">
+                    <svg className="w-16 h-16 mx-auto opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
                   </div>
-                ))}
-              </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">No activity yet</h3>
+                  <p className="text-secondary-400 mb-4">Your activity timeline will appear here as you engage with the platform</p>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setActiveTab('projects')}
+                    className="btn-primary"
+                  >
+                    Create Your First Project
+                  </motion.button>
+                </div>
+              )}
             </div>
           )}
 
@@ -775,50 +744,68 @@ const ProfilePage: React.FC = () => {
                   Mark all as read
                 </motion.button>
               </div>
-              <div className="space-y-4">
-                {userNotifications.map((notification) => (
-                  <motion.div
-                    key={notification.id}
-                    whileHover={{ scale: 1.02 }}
-                    className={`p-4 rounded-lg border-l-4 ${
-                      !notification.read
-                        ? 'bg-primary-500/10 border-primary-500'
-                        : 'bg-secondary-800/50 border-secondary-600'
-                    }`}
-                  >
-                    <div className="flex items-start space-x-4">
-                      {notification.avatar ? (
-                        <img
-                          src={notification.avatar}
-                          alt="User"
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center">
-                          <StarIcon className="w-5 h-5 text-white" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <h4 className="font-medium text-white">{notification.title}</h4>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs text-secondary-500">{notification.time}</span>
-                            {!notification.read && (
-                              <button
-                                onClick={() => markNotificationAsRead(notification.id)}
-                                className="text-primary-400 hover:text-primary-300"
-                              >
-                                <CheckCircleIcon className="w-4 h-4" />
-                              </button>
-                            )}
+              {userNotificationsData && userNotificationsData.length > 0 ? (
+                <div className="space-y-4">
+                  {userNotificationsData.map((notification) => (
+                    <motion.div
+                      key={notification.id}
+                      whileHover={{ scale: 1.02 }}
+                      className={`p-4 rounded-lg border-l-4 ${
+                        !notification.read
+                          ? 'bg-primary-500/10 border-primary-500'
+                          : 'bg-secondary-800/50 border-secondary-600'
+                      }`}
+                    >
+                      <div className="flex items-start space-x-4">
+                        {notification.avatar ? (
+                          <img
+                            src={notification.avatar}
+                            alt="User"
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center">
+                            <StarIcon className="w-5 h-5 text-white" />
                           </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <h4 className="font-medium text-white">{notification.title}</h4>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs text-secondary-500">{notification.time}</span>
+                              {!notification.read && (
+                                <button
+                                  onClick={() => markNotificationAsRead(notification.id)}
+                                  className="text-primary-400 hover:text-primary-300"
+                                >
+                                  <CheckCircleIcon className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-secondary-300 text-sm">{notification.message}</p>
                         </div>
-                        <p className="text-secondary-300 text-sm">{notification.message}</p>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="text-secondary-400 mb-4">
+                    <BellIcon className="w-16 h-16 mx-auto opacity-50" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">No notifications yet</h3>
+                  <p className="text-secondary-400 mb-4">You'll receive notifications about project updates, comments, and more</p>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setActiveTab('projects')}
+                    className="btn-primary"
+                  >
+                    Explore Projects
+                  </motion.button>
+                </div>
+              )}
             </div>
           )}
 
@@ -834,8 +821,8 @@ const ProfilePage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      defaultValue={user.fullName}
-                      value={isEditing ? formData.fullName : user.fullName}
+                      defaultValue={userData?.full_name || ''}
+                      value={isEditing ? formData.fullName : (userData?.full_name || '')}
                       onChange={(e) => isEditing && handleFormChange('fullName', e.target.value)}
                       className="input-primary"
                       disabled={!isEditing}
@@ -847,7 +834,7 @@ const ProfilePage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      value={isEditing ? formData.username : user.username}
+                      value={isEditing ? formData.username : (userData?.username || '')}
                       onChange={(e) => isEditing && handleFormChange('username', e.target.value)}
                       className="input-primary"
                       disabled={!isEditing}
@@ -859,7 +846,7 @@ const ProfilePage: React.FC = () => {
                     </label>
                     <input
                       type="email"
-                      value={isEditing ? formData.email : user.email}
+                      value={isEditing ? formData.email : (userData?.email || '')}
                       onChange={(e) => isEditing && handleFormChange('email', e.target.value)}
                       className="input-primary"
                       disabled={!isEditing}
@@ -871,7 +858,7 @@ const ProfilePage: React.FC = () => {
                     </label>
                     <input
                       type="tel"
-                      value={isEditing ? formData.phone : user.phone}
+                      value={isEditing ? formData.phone : ''}
                       onChange={(e) => isEditing && handleFormChange('phone', e.target.value)}
                       className="input-primary"
                       disabled={!isEditing}
@@ -882,7 +869,7 @@ const ProfilePage: React.FC = () => {
                       Bio
                     </label>
                     <textarea
-                      value={isEditing ? formData.bio : user.bio}
+                      value={isEditing ? formData.bio : (userData?.bio || '')}
                       onChange={(e) => isEditing && handleFormChange('bio', e.target.value)}
                       rows={3}
                       className="input-primary"
@@ -902,7 +889,7 @@ const ProfilePage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      value={isEditing ? formData.company : user.company}
+                      value={isEditing ? formData.company : (userData?.role || '')}
                       onChange={(e) => isEditing && handleFormChange('company', e.target.value)}
                       className="input-primary"
                       disabled={!isEditing}
@@ -914,7 +901,7 @@ const ProfilePage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      value={isEditing ? formData.education : user.education}
+                      value={isEditing ? formData.education : ''}
                       onChange={(e) => isEditing && handleFormChange('education', e.target.value)}
                       className="input-primary"
                       disabled={!isEditing}
@@ -926,7 +913,7 @@ const ProfilePage: React.FC = () => {
                     </label>
                     <input
                       type="url"
-                      value={isEditing ? formData.website : user.website}
+                      value={isEditing ? formData.website : (userData?.website || '')}
                       onChange={(e) => isEditing && handleFormChange('website', e.target.value)}
                       className="input-primary"
                       disabled={!isEditing}
@@ -938,7 +925,7 @@ const ProfilePage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      value={isEditing ? formData.location : user.location}
+                      value={isEditing ? formData.location : (userData?.location || '')}
                       onChange={(e) => isEditing && handleFormChange('location', e.target.value)}
                       className="input-primary"
                       disabled={!isEditing}

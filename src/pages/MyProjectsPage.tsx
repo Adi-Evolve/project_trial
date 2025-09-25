@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   PlusIcon,
@@ -23,6 +23,8 @@ import {
   HeartIcon as HeartSolid,
   StarIcon as StarSolid
 } from '@heroicons/react/24/solid';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../services/supabase';
 
 interface Project {
   id: string;
@@ -46,107 +48,68 @@ interface Project {
 }
 
 const MyProjectsPage: React.FC = () => {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [sortBy, setSortBy] = useState('lastUpdated');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showFilters, setShowFilters] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Mock projects data
-  const [projects, setProjects] = useState<Project[]>([
-    {
-      id: '1',
-      title: 'AI Code Assistant',
-      description: 'An intelligent coding assistant powered by machine learning that helps developers write better code faster.',
-      category: 'AI/ML',
-      status: 'Active',
-      visibility: 'Public',
-      upvotes: 234,
-      comments: 45,
-      views: 1250,
-      shares: 28,
-      collaborators: 3,
-      createdDate: '2024-01-15',
-      lastUpdated: '2024-02-10',
-      image: 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=400&h=250&fit=crop',
-      tags: ['AI', 'Machine Learning', 'Developer Tools', 'VS Code'],
-      progress: 75,
-      isLiked: true,
-      isBookmarked: true
-    },
-    {
-      id: '2',
-      title: 'Sustainable Energy Tracker',
-      description: 'Mobile app for tracking renewable energy consumption and carbon footprint reduction.',
-      category: 'Environment',
-      status: 'Completed',
-      visibility: 'Public',
-      upvotes: 189,
-      comments: 32,
-      views: 890,
-      shares: 15,
-      collaborators: 2,
-      createdDate: '2023-11-20',
-      lastUpdated: '2024-01-08',
-      image: 'https://images.unsplash.com/photo-1466611653911-95081537e5b7?w=400&h=250&fit=crop',
-      tags: ['Environment', 'Mobile App', 'React Native', 'Sustainability'],
-      progress: 100
-    },
-    {
-      id: '3',
-      title: 'Local Community Hub',
-      description: 'Platform connecting neighbors for local services, events, and community building.',
-      category: 'Social',
-      status: 'Active',
-      visibility: 'Public',
-      upvotes: 156,
-      comments: 28,
-      views: 675,
-      shares: 12,
-      collaborators: 5,
-      createdDate: '2024-02-01',
-      lastUpdated: '2024-02-08',
-      image: 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=400&h=250&fit=crop',
-      tags: ['Community', 'Social Network', 'Local Services', 'React'],
-      progress: 60
-    },
-    {
-      id: '4',
-      title: 'Blockchain Voting System',
-      description: 'Secure and transparent voting system using blockchain technology.',
-      category: 'Blockchain',
-      status: 'Draft',
-      visibility: 'Private',
-      upvotes: 0,
-      comments: 0,
-      views: 0,
-      shares: 0,
-      collaborators: 1,
-      createdDate: '2024-02-12',
-      lastUpdated: '2024-02-12',
-      tags: ['Blockchain', 'Voting', 'Ethereum', 'Smart Contracts'],
-      progress: 15
-    },
-    {
-      id: '5',
-      title: 'Health & Fitness Companion',
-      description: 'Comprehensive health tracking app with AI-powered personalized recommendations.',
-      category: 'Health',
-      status: 'Paused',
-      visibility: 'Unlisted',
-      upvotes: 67,
-      comments: 12,
-      views: 340,
-      shares: 5,
-      collaborators: 2,
-      createdDate: '2023-10-15',
-      lastUpdated: '2024-01-20',
-      image: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=250&fit=crop',
-      tags: ['Health', 'Fitness', 'AI', 'Mobile App', 'iOS'],
-      progress: 40
+  // Real projects data from Supabase
+  const [projects, setProjects] = useState<any[]>([]);
+
+  // Load user projects from Supabase
+  useEffect(() => {
+    if (user) {
+      loadUserProjects();
     }
-  ]);
+  }, [user]);
+
+  const loadUserProjects = async () => {
+    try {
+      setLoading(true);
+      const { data: userProjects, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('creator_id', user?.id)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading user projects:', error);
+        return;
+      }
+
+      // Transform the data to match the expected format
+      const transformedProjects = (userProjects || []).map(project => ({
+        id: project.id,
+        title: project.title,
+        description: project.description,
+        category: project.category || 'General',
+        status: project.status || 'Draft',
+        visibility: project.visibility || 'Public',
+        upvotes: project.like_count || 0,
+        comments: project.comment_count || 0,
+        views: project.view_count || 0,
+        shares: 0, // Not in current schema
+        collaborators: 1, // Default to 1
+        createdDate: project.created_at,
+        lastUpdated: project.updated_at,
+        image: project.image_url,
+        tags: project.tags || [],
+        progress: project.progress || 0,
+        isLiked: false, // Would need additional query
+        isBookmarked: false // Would need additional query
+      }));
+
+      setProjects(transformedProjects);
+    } catch (error) {
+      console.error('Error loading projects:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const statusOptions = ['All', 'Draft', 'Active', 'Completed', 'Paused', 'Archived'];
   const categoryOptions = ['All', 'AI/ML', 'Environment', 'Social', 'Blockchain', 'Health', 'Education', 'Finance'];
@@ -163,7 +126,7 @@ const MyProjectsPage: React.FC = () => {
     .filter(project => {
       const matchesSearch = project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           project.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+                           (project.tags && project.tags.some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase())));
       const matchesStatus = selectedStatus === 'All' || project.status === selectedStatus;
       const matchesCategory = selectedCategory === 'All' || project.category === selectedCategory;
       return matchesSearch && matchesStatus && matchesCategory;
@@ -249,27 +212,37 @@ const MyProjectsPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-secondary-900 via-secondary-800 to-secondary-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2">My Projects</h1>
-              <p className="text-secondary-300">Manage and track your project portfolio</p>
+        {loading ? (
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+              <p className="text-secondary-400">Loading your projects...</p>
             </div>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="mt-4 sm:mt-0 btn-primary flex items-center space-x-2"
-            >
-              <PlusIcon className="w-5 h-5" />
-              <span>New Project</span>
-            </motion.button>
           </div>
-        </motion.div>
+        ) : (
+          <>
+            {/* Header */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold text-white mb-2">My Projects</h1>
+                  <p className="text-secondary-300">Manage and track your project portfolio</p>
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => window.location.href = '/create-project'}
+                  className="mt-4 sm:mt-0 btn-primary flex items-center space-x-2"
+                >
+                  <PlusIcon className="w-5 h-5" />
+                  <span>New Project</span>
+                </motion.button>
+              </div>
+            </motion.div>
 
         {/* Stats Overview */}
         <motion.div
@@ -428,6 +401,7 @@ const MyProjectsPage: React.FC = () => {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                onClick={() => window.location.href = '/create-project'}
                 className="btn-primary flex items-center space-x-2 mx-auto"
               >
                 <PlusIcon className="w-5 h-5" />
@@ -541,7 +515,7 @@ const MyProjectsPage: React.FC = () => {
 
                     {/* Tags */}
                     <div className="flex flex-wrap gap-2 mb-4">
-                      {project.tags.slice(0, 3).map((tag) => (
+                      {project.tags && project.tags.length > 0 && project.tags.slice(0, 3).map((tag: string) => (
                         <span
                           key={tag}
                           className="px-2 py-1 text-xs bg-secondary-700/50 text-secondary-300 rounded-full"
@@ -549,7 +523,7 @@ const MyProjectsPage: React.FC = () => {
                           {tag}
                         </span>
                       ))}
-                      {project.tags.length > 3 && (
+                      {project.tags && project.tags.length > 3 && (
                         <span className="px-2 py-1 text-xs bg-secondary-700/50 text-secondary-300 rounded-full">
                           +{project.tags.length - 3}
                         </span>
@@ -602,6 +576,8 @@ const MyProjectsPage: React.FC = () => {
             </div>
           )}
         </motion.div>
+          </>
+        )}
       </div>
     </div>
   );

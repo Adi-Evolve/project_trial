@@ -15,6 +15,7 @@ import ProjectForm from '../components/projects/ProjectForm';
 import { toast } from 'react-hot-toast';
 import { localStorageService } from '../services/localStorage';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../services/supabase';
 
 interface Project {
   id: string;
@@ -99,64 +100,80 @@ const ProjectsPage: React.FC = () => {
   const loadProjects = async () => {
     try {
       setLoading(true);
-      
-      const storedProjects = localStorageService.getAllProjects();
+
+      // Load projects from Supabase
+      const { data: projectsData, error } = await supabase
+        .from('projects')
+        .select(`
+          *,
+          users:creator_id (
+            id,
+            username,
+            avatar_url
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading projects:', error);
+        toast.error('Failed to load projects');
+        return;
+      }
 
       // Transform the data to match our Project interface
-      const transformedProjects: Project[] = storedProjects.map((project: any) => {
+      const transformedProjects: Project[] = (projectsData || []).map((project: any) => {
         return {
           id: project.id,
           title: project.title,
           description: project.description,
-          category: project.category,
+          category: project.category || 'General',
           tags: project.tags || [],
-          fundingGoal: project.fundingGoal || 0,
-          fundingRaised: project.currentFunding || 0,
+          fundingGoal: project.funding_goal || 0,
+          fundingRaised: project.funding_raised || 0,
           deadline: project.deadline || '',
-          teamSize: project.teamSize || 1,
-          skillsNeeded: project.technologies || [],
-          createdBy: project.creatorId,
-          createdAt: project.createdAt,
-          status: project.status as 'active' | 'funded' | 'expired',
+          teamSize: project.team_size || 1,
+          skillsNeeded: project.skills_needed || [],
+          createdBy: project.creator_id,
+          createdAt: project.created_at,
+          status: (project.status as 'active' | 'funded' | 'expired') || 'active',
           supporters: project.supporters || [],
-          comments: project.comments || 0,
-          likes: project.likes || 0,
-          views: project.views || 0,
-          bookmarks: 0, // Basic implementation
-          isLiked: false, // Will be enhanced later
-          isBookmarked: false, // Will be enhanced later
+          comments: project.comment_count || 0,
+          likes: project.like_count || 0,
+          views: project.view_count || 0,
+          bookmarks: project.bookmark_count || 0,
+          isLiked: false, // Would need additional query for user-specific data
+          isBookmarked: false, // Would need additional query for user-specific data
           creator: {
-            id: project.creatorId,
-            username: project.creatorName || 'Unknown Creator',
-            avatar: '', // Could be enhanced with user profile data
+            id: project.creator_id,
+            username: project.users?.username || 'Unknown Creator',
+            avatar: project.users?.avatar_url || '',
             verified: false // Could be enhanced with verification system
           },
-          images: project.imageHashes || [],
-          blockchainRecord: project.blockchainRecord ? {
-            txHash: project.blockchainRecord.txHash,
-            verified: project.blockchainRecord.verified || true,
-            blockNumber: project.blockchainRecord.blockNumber,
-            timestamp: project.blockchainRecord.timestamp
+          images: project.images || [],
+          blockchainRecord: project.blockchain_record ? {
+            txHash: project.blockchain_record.tx_hash,
+            verified: project.blockchain_record.verified || true,
+            blockNumber: project.blockchain_record.block_number,
+            timestamp: project.blockchain_record.timestamp
           } : undefined
         };
       });
 
       // Filter only active projects
       const activeProjects = transformedProjects.filter(p => p.status === 'active');
-      
 
       setProjects(activeProjects);
       setFilteredProjects(activeProjects);
-      
+
       if (activeProjects.length === 0) {
-        toast.success('📝 No projects found. Create your first project!', { duration: 3000 });
+        toast.success('📝 No active projects found. Be the first to create one!', { duration: 3000 });
       } else {
-        toast.success(`📊 Loaded ${activeProjects.length} projects successfully!`, { duration: 2000 });
+        toast.success(`📊 Loaded ${activeProjects.length} active projects successfully!`, { duration: 2000 });
       }
-      
+
     } catch (error) {
       console.error('Error in loadProjects:', error);
-      toast.error('Failed to load projects from local storage');
+      toast.error('Failed to load projects from database');
     } finally {
       setLoading(false);
     }

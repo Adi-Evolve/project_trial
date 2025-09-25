@@ -83,7 +83,7 @@ const IdeaHubPage: React.FC = () => {
         .from('ideas')
         .select(`
           *,
-          users:creator_id (
+          users!ideas_creator_id_fkey (
             id,
             username,
             full_name,

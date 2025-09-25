@@ -18,6 +18,7 @@ export interface ProjectSupabaseData {
   blockchain_campaign_id?: number;
   blockchain_tx_hash?: string;
   ipfs_hash?: string;
+  blockchain_id?: string; // <-- Added for blockchain project ID
   image_url?: string;
   video_url?: string;
   website_url?: string;
@@ -94,75 +95,156 @@ class EnhancedProjectService {
   // Save project to Supabase with correct schema
   private async saveProjectToSupabase(project: StoredProject): Promise<string | null> {
     try {
-      console.log('📤 Preparing Supabase data for project:', project.id);
-
-      const supabaseData: ProjectSupabaseData = {
-        // Map to correct schema fields
-        creator_id: project.creatorId,
+      console.log('� SAVE PROJECT TO SUPABASE - Starting...');
+      console.log('📝 Project to save:', {
+        id: project.id,
         title: project.title,
-        description: project.description,
-        short_description: project.longDescription?.substring(0, 500) || project.description.substring(0, 500),
-        category: project.category,
-        tags: project.tags || [],
-        funding_goal: project.fundingGoal || 0,
-        current_funding: project.currentFunding || 0,
-        currency: 'ETH', // Default currency
-        deadline: project.deadline,
-        status: project.status as any || 'draft',
-        blockchain_tx_hash: project.blockchainTxHash,
-        ipfs_hash: project.ipfsHash, // 🎯 Key field for IPFS hash
-        image_url: project.imageHashes && project.imageHashes.length > 0 
-          ? `https://gateway.pinata.cloud/ipfs/${project.imageHashes[0]}` 
-          : undefined,
-        video_url: project.videoUrl,
-        website_url: project.demoUrl,
-        roadmap: project.roadmap || [],
-        team_members: project.fundingTiers || [],
-        featured: false,
-        total_backers: 0,
-        view_count: project.views || 0,
-        like_count: project.likes || 0,
-        comment_count: project.comments || 0,
-        created_at: project.createdAt,
-        updated_at: new Date().toISOString()
-      };
-
-      console.log('📊 Supabase data prepared:', {
-        creator_id: supabaseData.creator_id,
-        title: supabaseData.title,
-        ipfs_hash: supabaseData.ipfs_hash,
-        blockchain_tx_hash: supabaseData.blockchain_tx_hash
+        creatorId: project.creatorId,
+        ipfsHash: project.ipfsHash,
+        blockchainTxHash: project.blockchainTxHash
       });
 
-      // Insert into Supabase with proper error handling
-      const { data, error } = await supabase
+      // Check if project already exists by blockchain_id (which is the project.id)
+      const { data: existingProject, error: checkError } = await supabase
         .from('projects')
-        .insert(supabaseData)
         .select('id')
+        .eq('blockchain_id', project.id)
         .single();
 
-      if (error) {
-        console.error('❌ Supabase insert error:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
+      let supabaseId: string;
+
+      if (existingProject) {
+        // Project exists, update it
+        console.log('🔄 Project exists, updating:', existingProject.id);
+
+        const supabaseData: Partial<ProjectSupabaseData> = {
+          title: project.title,
+          description: project.description,
+          short_description: project.longDescription?.substring(0, 500) || project.description.substring(0, 500),
+          category: project.category,
+          tags: project.tags || [],
+          funding_goal: project.fundingGoal || 0,
+          current_funding: project.currentFunding || 0,
+          currency: 'ETH',
+          deadline: project.deadline,
+          status: project.status as any || 'active',
+          blockchain_tx_hash: project.blockchainTxHash,
+          ipfs_hash: project.ipfsHash,
+          blockchain_id: project.id,
+          image_url: project.imageHashes && project.imageHashes.length > 0
+            ? `https://gateway.pinata.cloud/ipfs/${project.imageHashes[0]}`
+            : undefined,
+          video_url: project.videoUrl,
+          website_url: project.demoUrl,
+          roadmap: project.roadmap || [],
+          team_members: project.fundingTiers || [],
+          featured: false,
+          total_backers: 0,
+          view_count: project.views || 0,
+          like_count: project.likes || 0,
+          comment_count: project.comments || 0,
+          updated_at: new Date().toISOString()
+        };
+
+        const { data: updateData, error: updateError } = await supabase
+          .from('projects')
+          .update(supabaseData)
+          .eq('id', existingProject.id)
+          .select('id')
+          .single();
+
+        if (updateError) {
+          console.error('❌ SUPABASE PROJECT UPDATE FAILED!');
+          console.error('🔍 Detailed error analysis:', updateError);
+          throw new Error(`Database update error: ${updateError.message}`);
+        }
+
+        supabaseId = existingProject.id;
+        console.log('✅ SUPABASE PROJECT UPDATE SUCCESSFUL!');
+        console.log('🆔 Updated project UUID:', supabaseId);
+
+      } else {
+        // Project doesn't exist, insert it
+        console.log('� Project does not exist, inserting new record');
+
+        const supabaseData: ProjectSupabaseData = {
+          creator_id: project.creatorId,
+          title: project.title,
+          description: project.description,
+          short_description: project.longDescription?.substring(0, 500) || project.description.substring(0, 500),
+          category: project.category,
+          tags: project.tags || [],
+          funding_goal: project.fundingGoal || 0,
+          current_funding: project.currentFunding || 0,
+          currency: 'ETH',
+          deadline: project.deadline,
+          status: project.status as any || 'active',
+          blockchain_tx_hash: project.blockchainTxHash,
+          ipfs_hash: project.ipfsHash,
+          blockchain_id: project.id,
+          image_url: project.imageHashes && project.imageHashes.length > 0
+            ? `https://gateway.pinata.cloud/ipfs/${project.imageHashes[0]}`
+            : undefined,
+          video_url: project.videoUrl,
+          website_url: project.demoUrl,
+          roadmap: project.roadmap || [],
+          team_members: project.fundingTiers || [],
+          featured: false,
+          total_backers: 0,
+          view_count: project.views || 0,
+          like_count: project.likes || 0,
+          comment_count: project.comments || 0,
+          created_at: project.createdAt,
+          updated_at: new Date().toISOString()
+        };
+
+        console.log('� Full Supabase data to insert:', JSON.stringify(supabaseData, null, 2));
+
+        const { data, error } = await supabase
+          .from('projects')
+          .insert(supabaseData)
+          .select('id')
+          .single();
+
+        console.log('📊 Supabase insert result:', {
+          success: !error,
+          data: data,
+          error: error ? {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint
+          } : null
         });
-        throw new Error(`Database error: ${error.message}`);
+
+        if (error) {
+          console.error('❌ SUPABASE PROJECT INSERT FAILED!');
+          console.error('🔍 Detailed error analysis:');
+          console.error('   - Code:', error.code);
+          console.error('   - Message:', error.message);
+          console.error('   - Details:', error.details);
+          console.error('   - Hint:', error.hint);
+          console.error('   - Full error object:', error);
+          throw new Error(`Database error: ${error.message}`);
+        }
+
+        if (!data) {
+          console.error('❌ No data returned from Supabase insert');
+          throw new Error('No data returned from Supabase insert');
+        }
+
+        supabaseId = data.id;
+        console.log('✅ SUPABASE PROJECT INSERT SUCCESSFUL!');
+        console.log('🆔 New project UUID:', supabaseId);
+        console.log('📝 Project title:', supabaseData.title);
       }
 
-      if (!data) {
-        throw new Error('No data returned from Supabase insert');
-      }
-
-      console.log('✅ Supabase insert successful:', data);
-      
       // Also save IPFS hash specifically to ipfs_storage table if available
       if (project.ipfsHash) {
-        await this.saveIPFSRecord(project.ipfsHash, data.id, project.creatorId);
+        await this.saveIPFSRecord(project.ipfsHash, supabaseId, project.creatorId);
       }
 
-      return data.id;
+      return supabaseId;
 
     } catch (error) {
       console.error('❌ Supabase save error:', error);
@@ -278,6 +360,55 @@ class EnhancedProjectService {
     }
   }
 
+  // Ensure project exists in Supabase (for projects created on blockchain)
+  async ensureProjectInSupabase(
+    projectId: string, 
+    localProject: StoredProject, 
+    blockchainTxHash?: string
+  ): Promise<{
+    success: boolean;
+    supabaseId?: string;
+    error?: string;
+  }> {
+    try {
+      console.log('🔍 Checking if project exists in Supabase...');
+      
+      // First check if project already exists by title
+      const { data: existingProject } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('title', projectId)
+        .single();
+      
+      if (existingProject) {
+        console.log('✅ Project already exists in Supabase:', existingProject.id);
+        return { success: true, supabaseId: existingProject.id };
+      }
+      
+      // Project doesn't exist, create it
+      console.log('📝 Project not in Supabase, creating...');
+      
+      const projectWithBlockchain: StoredProject = {
+        ...localProject,
+        blockchainTxHash: blockchainTxHash || localProject.blockchainTxHash,
+        status: 'active' as const // Set to active since it's on blockchain
+      };
+      
+      const supabaseId = await this.saveProjectToSupabase(projectWithBlockchain);
+      
+      if (supabaseId) {
+        console.log('✅ Project created in Supabase:', supabaseId);
+        return { success: true, supabaseId };
+      } else {
+        return { success: false, error: 'Failed to create project in Supabase' };
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Error ensuring project in Supabase:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   // Update project in both localStorage and Supabase
   async updateProject(projectId: string, updates: Partial<StoredProject>): Promise<{
     success: boolean;
@@ -324,19 +455,64 @@ class EnhancedProjectService {
       // Add updated timestamp
       supabaseUpdates.updated_at = new Date().toISOString();
 
-      // Update in Supabase
+      // Update in Supabase - first find the correct record
+      console.log('🔍 Looking for Supabase project record...');
+      console.log('🎯 Project ID to find:', projectId);
+      
+      let supabaseProjectId = projectId;
+      
+      // If projectId is not a UUID (blockchain project ID), find by title
+      if (!projectId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+        console.log('🔄 Project ID is not UUID, searching by title...');
+        
+        const { data: foundProject, error: findError } = await supabase
+          .from('projects')
+          .select('id')
+          .eq('title', projectId)
+          .single();
+        
+        if (foundProject) {
+          supabaseProjectId = foundProject.id;
+          console.log('✅ Found Supabase project UUID:', supabaseProjectId);
+        } else {
+          console.warn('⚠️ Project not found in Supabase, cannot update');
+          console.warn('🔍 Find error:', findError?.message);
+          // Don't throw error, just log warning and continue
+          return {
+            success: true,
+            project: updatedProject || undefined,
+            error: `Project not found in Supabase: ${projectId}`
+          };
+        }
+      }
+
+      console.log('📤 Updating Supabase project:', supabaseProjectId);
+      console.log('📝 Updates to apply:', JSON.stringify(supabaseUpdates, null, 2));
+
       const { data: supabaseData, error: supabaseError } = await supabase
         .from('projects')
         .update(supabaseUpdates)
-        .eq('id', projectId)
+        .eq('id', supabaseProjectId)
         .select();
 
+      console.log('📊 Supabase update result:', {
+        success: !supabaseError,
+        data: supabaseData,
+        error: supabaseError ? {
+          code: supabaseError.code,
+          message: supabaseError.message,
+          details: supabaseError.details,
+          hint: supabaseError.hint
+        } : null
+      });
+
       if (supabaseError) {
-        console.error('❌ Failed to update project in Supabase:', supabaseError);
+        console.error('❌ SUPABASE PROJECT UPDATE FAILED!');
+        console.error('🔍 Error details:', supabaseError);
         throw supabaseError;
       }
 
-      console.log('✅ Project updated in Supabase:', supabaseData);
+      console.log('✅ Project updated successfully in Supabase');
 
       return {
         success: true,
