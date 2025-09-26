@@ -10,6 +10,7 @@ import {
   EyeIcon,
   BookmarkIcon
 } from '@heroicons/react/24/outline';
+import { getPrimaryImage } from '../../utils/image';
 
 interface Project {
   id: string;
@@ -310,10 +311,10 @@ export const DiscoveryFeed: React.FC<DiscoveryFeedProps> = ({
                 </div>
 
                 {/* Project Image */}
-                {project.images[0] && (
+                {getPrimaryImage(project) && (
                   <div className="rounded-lg overflow-hidden mb-4">
                     <img
-                      src={project.images[0]}
+                      src={getPrimaryImage(project)}
                       alt={project.title}
                       className="w-full h-48 object-cover"
                     />

@@ -26,6 +26,7 @@ import {
 } from '@heroicons/react/24/solid';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabase';
+import { getPrimaryImage } from '../utils/image';
 
 interface Project {
   id: string;
@@ -99,10 +100,8 @@ const MyProjectsPage: React.FC = () => {
         collaborators: 1, // Default to 1
         createdDate: project.created_at,
         lastUpdated: project.updated_at,
-        // Prefer image_urls (text[]) -> image_url (legacy) -> image_hashes (ipfs hashes)
-        image: (project.image_urls && project.image_urls.length > 0)
-                 ? project.image_urls[0]
-                 : (project.image_url || (project.image_hashes && project.image_hashes.length > 0 ? `https://gateway.pinata.cloud/ipfs/${project.image_hashes[0]}` : undefined)),
+  // Prefer image_urls (text[]) -> image_url (legacy) -> image_hashes (ipfs hashes)
+  image: getPrimaryImage(project),
         tags: project.tags || [],
         progress: project.progress || 0,
         isLiked: false, // Would need additional query

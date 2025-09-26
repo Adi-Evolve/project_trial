@@ -12,6 +12,7 @@ import {
 import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
 import EngagementSystem from '../interactions/EngagementSystem';
 import CommentsSystem from '../interactions/CommentsSystem';
+import { getPrimaryImage } from '../../utils/image';
 
 interface Project {
   id: string;
@@ -132,10 +133,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       className="bg-secondary-800/80 backdrop-blur-xl rounded-2xl border border-secondary-700/50 overflow-hidden cursor-pointer group hover:border-primary-500/30 transition-all duration-300"
     >
       {/* Project Image */}
-      {project.images && project.images.length > 0 ? (
+      {getPrimaryImage(project) ? (
         <div className="relative h-48 overflow-hidden">
           <img
-            src={project.images[0]}
+            src={getPrimaryImage(project)}
             alt={project.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />

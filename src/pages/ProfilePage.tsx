@@ -4,6 +4,7 @@ import {
   UserCircleIcon,
   PencilIcon,
   CameraIcon,
+  PlusIcon,
   MapPinIcon,
   CalendarDaysIcon,
   LinkIcon,
@@ -41,9 +42,11 @@ import {
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabase';
+import { ipfsService } from '../services/ipfsService';
+import { getPrimaryImage } from '../utils/image';
 
 const ProfilePage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -62,6 +65,8 @@ const ProfilePage: React.FC = () => {
     showProjects: true,
     showActivity: true
   });
+  // local toggle for whether avatar should be shown on the header
+  const [showAvatar, setShowAvatar] = useState<boolean>(true);
   const [formData, setFormData] = useState({
     fullName: '',
     username: '',
@@ -118,6 +123,14 @@ const ProfilePage: React.FC = () => {
           company: userProfile.role || '',
           education: ''
         });
+        // Load showAvatar preference - try top-level column or JSON settings
+        if (typeof userProfile.show_avatar === 'boolean') {
+          setShowAvatar(userProfile.show_avatar);
+        } else if (userProfile.settings && userProfile.settings.profile && typeof userProfile.settings.profile.show_avatar === 'boolean') {
+          setShowAvatar(userProfile.settings.profile.show_avatar);
+        } else {
+          setShowAvatar(true);
+        }
       }
 
       // Load user's projects
@@ -150,6 +163,55 @@ const ProfilePage: React.FC = () => {
       toast.error('Failed to load profile data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAvatarUpload = async (file: File) => {
+    try {
+      toast.loading('Uploading avatar...');
+      const res = await ipfsService.uploadFile(file, { name: `avatar_${user?.id}`, type: 'avatar' });
+      toast.dismiss();
+      if (res.success && res.ipfsHash) {
+        const url = ipfsService.getFileUrl(res.ipfsHash);
+        // Persist to Supabase
+        const { error } = await supabase.from('users').update({ avatar_url: url }).eq('id', userData?.id || user?.id);
+        if (error) {
+          toast.error('Failed to save avatar');
+          console.error('Avatar save error:', error);
+        } else {
+          setUserData((p: any) => ({ ...p, avatar_url: url }));
+          toast.success('Avatar updated');
+        }
+      } else {
+        toast.error('Avatar upload failed');
+      }
+    } catch (err) {
+      console.error('Avatar upload error:', err);
+      toast.error('Avatar upload failed');
+    }
+  };
+
+  const handleCoverUpload = async (file: File) => {
+    try {
+      toast.loading('Uploading cover photo...');
+      const res = await ipfsService.uploadFile(file, { name: `cover_${user?.id}`, type: 'cover' });
+      toast.dismiss();
+      if (res.success && res.ipfsHash) {
+        const url = ipfsService.getFileUrl(res.ipfsHash);
+        const { error } = await supabase.from('users').update({ cover_photo: url }).eq('id', userData?.id || user?.id);
+        if (error) {
+          toast.error('Failed to save cover photo');
+          console.error('Cover save error:', error);
+        } else {
+          setUserData((p: any) => ({ ...p, cover_photo: url }));
+          toast.success('Cover photo updated');
+        }
+      } else {
+        toast.error('Cover upload failed');
+      }
+    } catch (err) {
+      console.error('Cover upload error:', err);
+      toast.error('Cover upload failed');
     }
   };
 
@@ -204,10 +266,76 @@ const ProfilePage: React.FC = () => {
     setPrivacy(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleSaveProfile = () => {
-    // In a real app, this would make an API call
-    toast.success('Profile updated successfully!');
-    setIsEditing(false);
+  const handleSaveProfile = async () => {
+    try {
+      setLoading(true);
+      const updates: any = {
+        full_name: formData.fullName,
+        username: formData.username,
+        email: formData.email,
+        bio: formData.bio,
+        website: formData.website,
+        location: formData.location,
+        role: formData.company
+      };
+
+      const id = userData?.id || user?.id;
+      if (!id) {
+        toast.error('Unable to identify user to save profile');
+        return;
+      }
+
+      const { error } = await supabase.from('users').update(updates).eq('id', id);
+      if (error) {
+        console.error('Failed to update profile:', error);
+        toast.error('Failed to save profile');
+        return;
+      }
+      // Persist avatar visibility preference
+      try {
+        // Attempt to update top-level show_avatar directly and ignore errors
+        const { error: avatarErr } = await supabase.from('users').update({ show_avatar: showAvatar }).eq('id', id);
+        if (avatarErr) {
+          // fallback: merge into settings JSON
+          const currentSettings = userData?.settings || {};
+          const newSettings = { ...currentSettings, profile: { ...(currentSettings.profile || {}), show_avatar: showAvatar } };
+          await supabase.from('users').update({ settings: newSettings }).eq('id', id);
+        }
+      } catch (e) {
+        // best-effort
+        console.warn('Could not persist avatar visibility setting:', e);
+      }
+
+      // Refresh local userData
+      const { data: refreshed, error: refreshErr } = await supabase.from('users').select('*').eq('id', id).single();
+      if (refreshErr) {
+        console.error('Failed to refresh user after update:', refreshErr);
+      } else if (refreshed) {
+        setUserData(refreshed);
+        // Update auth context so other parts of the app show the new name/username
+        try {
+          updateUser({
+            fullName: refreshed.full_name,
+            username: refreshed.username,
+            email: refreshed.email,
+            bio: refreshed.bio,
+            avatarUrl: refreshed.avatar_url,
+            id: refreshed.id
+          });
+        } catch (e) {
+          // Best-effort - continue
+          console.warn('Failed to update auth context:', e);
+        }
+      }
+
+      toast.success('Profile updated successfully!');
+      setIsEditing(false);
+    } catch (err) {
+      console.error('Error saving profile:', err);
+      toast.error('Failed to save profile');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleStartEditing = () => {
@@ -255,31 +383,40 @@ const ProfilePage: React.FC = () => {
                 />
               )}
               <div className="absolute inset-0 bg-gradient-to-r from-black/20 to-black/10"></div>
-              <button className="absolute top-4 right-4 p-2 rounded-lg bg-black/50 hover:bg-black/70 transition-colors">
+              <input id="cover-upload" type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files && e.target.files[0]) handleCoverUpload(e.target.files[0]); }} />
+              <label htmlFor="cover-upload" className="absolute top-4 right-4 p-2 rounded-lg bg-black/50 hover:bg-black/70 transition-colors cursor-pointer">
                 <CameraIcon className="w-5 h-5 text-white" />
-              </button>
+              </label>
             </div>
 
             {/* Profile Info */}
             <div className="relative -mt-20 flex flex-col md:flex-row md:items-end md:space-x-8">
               {/* Avatar */}
-              <div className="relative mb-4 md:mb-0">
-                <img
-                  src={userData?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face'}
-                  alt={userData?.full_name || 'User'}
-                  className="w-32 h-32 rounded-2xl border-4 border-white shadow-xl object-cover"
-                />
-                <button className="absolute bottom-2 right-2 p-2 rounded-lg bg-primary-500 hover:bg-primary-600 transition-colors shadow-lg">
-                  <CameraIcon className="w-4 h-4 text-white" />
-                </button>
-              </div>
+              {/* Avatar - respect showAvatar preference */}
+              {showAvatar && (
+                <div className="relative mb-4 md:mb-0">
+                  <img
+                    src={userData?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face'}
+                    alt={userData?.full_name || 'User'}
+                    className="w-32 h-32 rounded-2xl border-4 border-white shadow-xl object-cover"
+                  />
+                  <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files && e.target.files[0]) handleAvatarUpload(e.target.files[0]); }} />
+                  <label htmlFor="avatar-upload" aria-label="Upload avatar" className="absolute bottom-2 right-2 p-2 rounded-full bg-primary-500 hover:bg-primary-600 transition-colors shadow-lg cursor-pointer flex items-center justify-center">
+                    {userData?.avatar_url ? (
+                      <CameraIcon className="w-4 h-4 text-white" />
+                    ) : (
+                      <PlusIcon className="w-5 h-5 text-white" />
+                    )}
+                  </label>
+                </div>
+              )}
 
               {/* User Details */}
               <div className="flex-1 min-w-0">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h1 className="text-3xl font-bold text-white mb-2">{userData?.full_name || 'Loading...'}</h1>
-                    <p className="text-lg text-secondary-300">@{userData?.username || userData?.wallet_address?.slice(0, 10) + '...'}</p>
+                    <h1 className="text-3xl font-bold text-white mb-2">{user?.fullName || userData?.full_name || user?.name || 'Loading...'}</h1>
+                    <p className="text-lg text-secondary-300">@{userData?.username || user?.username || userData?.wallet_address?.slice(0, 10) + '...'}</p>
                   </div>
                   <div className="mt-4 sm:mt-0 flex space-x-3">
                     <motion.button
@@ -447,7 +584,7 @@ const ProfilePage: React.FC = () => {
                           className="glass-light rounded-lg p-4 flex items-center space-x-4"
                         >
                           <img
-                            src={project.image_url || 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=300&h=200&fit=crop'}
+                            src={getPrimaryImage(project) || 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=300&h=200&fit=crop'}
                             alt={project.title}
                             className="w-16 h-16 rounded-lg object-cover"
                           />
@@ -568,7 +705,7 @@ const ProfilePage: React.FC = () => {
                     className="glass rounded-xl overflow-hidden"
                   >
                     <img
-                      src={project.image_url || 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=300&h=200&fit=crop'}
+                      src={getPrimaryImage(project) || 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=300&h=200&fit=crop'}
                       alt={project.title}
                       className="w-full h-48 object-cover"
                     />
@@ -1004,6 +1141,23 @@ const ProfilePage: React.FC = () => {
                       </button>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              {/* Avatar Visibility */}
+              <div className="glass rounded-xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-6">Avatar Visibility</h3>
+                <div className="flex items-center justify-between p-3 glass-light rounded-lg">
+                  <div>
+                    <h4 className="font-medium text-white">Show profile avatar</h4>
+                    <p className="text-sm text-secondary-400">Toggle whether your avatar appears on your profile header</p>
+                  </div>
+                  <button
+                    onClick={() => setShowAvatar(prev => !prev)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showAvatar ? 'bg-primary-500' : 'bg-secondary-600'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showAvatar ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
                 </div>
               </div>
 

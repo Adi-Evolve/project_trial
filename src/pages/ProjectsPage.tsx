@@ -16,6 +16,7 @@ import { toast } from 'react-hot-toast';
 import { localStorageService } from '../services/localStorage';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabase';
+import { getImageList, getPrimaryImage } from '../utils/image';
 
 interface Project {
   id: string;
@@ -198,7 +199,7 @@ const ProjectsPage: React.FC = () => {
             avatar: project.users?.avatar_url || '',
             verified: false // Could be enhanced with verification system
           },
-          images: project.image_urls || (project.image_url ? [project.image_url] : (project.image_hashes ? project.image_hashes.map((h: string) => `https://gateway.pinata.cloud/ipfs/${h}`) : [])),
+          images: getImageList(project),
           blockchainRecord: project.blockchain_record ? {
             txHash: project.blockchain_record.tx_hash,
             verified: project.blockchain_record.verified || true,

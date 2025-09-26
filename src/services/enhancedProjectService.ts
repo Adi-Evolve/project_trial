@@ -155,12 +155,18 @@ class EnhancedProjectService {
           blockchain_tx_hash: project.blockchainTxHash,
           ipfs_hash: project.ipfsHash,
           blockchain_id: project.id,
-          image_url: project.imageHashes && project.imageHashes.length > 0
-            ? `https://gateway.pinata.cloud/ipfs/${project.imageHashes[0]}`
-            : undefined,
-          // image_urls: only include if DB column exists (migration may not have run yet)
+          // Build final image URL list (prefer explicit imgbb/CDN URLs in project.imageUrls)
+          image_url: (project.imageUrls && project.imageUrls.length > 0)
+            ? project.imageUrls[0]
+            : (project.imageHashes && project.imageHashes.length > 0 ? `https://gateway.pinata.cloud/ipfs/${project.imageHashes[0]}` : undefined),
           ...(await this.columnExists('projects', 'image_urls') ? {
-            image_urls: project.imageUrls || (project.imageHashes ? project.imageHashes.map(h => `https://gateway.pinata.cloud/ipfs/${h}`) : [])
+            image_urls: (() => {
+              const urls: string[] = [];
+              if (project.imageUrls && project.imageUrls.length > 0) urls.push(...project.imageUrls);
+              if (project.imageHashes && project.imageHashes.length > 0) urls.push(...project.imageHashes.map(h => `https://gateway.pinata.cloud/ipfs/${h}`));
+              // Deduplicate and limit to 5
+              return Array.from(new Set(urls)).slice(0, 5);
+            })()
           } : {}),
           video_url: project.videoUrl,
           website_url: project.demoUrl,
@@ -210,11 +216,16 @@ class EnhancedProjectService {
           blockchain_tx_hash: project.blockchainTxHash,
           ipfs_hash: project.ipfsHash,
           blockchain_id: project.id,
-          image_url: project.imageHashes && project.imageHashes.length > 0
-            ? `https://gateway.pinata.cloud/ipfs/${project.imageHashes[0]}`
-            : undefined,
+          image_url: (project.imageUrls && project.imageUrls.length > 0)
+            ? project.imageUrls[0]
+            : (project.imageHashes && project.imageHashes.length > 0 ? `https://gateway.pinata.cloud/ipfs/${project.imageHashes[0]}` : undefined),
           ...(await this.columnExists('projects', 'image_urls') ? {
-            image_urls: project.imageUrls || (project.imageHashes ? project.imageHashes.map(h => `https://gateway.pinata.cloud/ipfs/${h}`) : [])
+            image_urls: (() => {
+              const urls: string[] = [];
+              if (project.imageUrls && project.imageUrls.length > 0) urls.push(...project.imageUrls);
+              if (project.imageHashes && project.imageHashes.length > 0) urls.push(...project.imageHashes.map(h => `https://gateway.pinata.cloud/ipfs/${h}`));
+              return Array.from(new Set(urls)).slice(0, 5);
+            })()
           } : {}),
           milestones: project.milestones || [],
           video_url: project.videoUrl,

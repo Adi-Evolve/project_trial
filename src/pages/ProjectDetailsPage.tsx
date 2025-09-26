@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import { StoredProject, localStorageService } from '../services/localStorage';
 import { enhancedProjectService } from '../services/enhancedProjectService';
+import { getImageList, getPrimaryImage } from '../utils/image';
 import ContributionsDisplay from '../components/funding/ContributionsDisplay';
 import { EscrowManagement } from '../components/escrow/EscrowManagement';
 import {
@@ -38,6 +39,8 @@ const ProjectDetailsPage: React.FC = () => {
   const [isLiked, setIsLiked] = useState(false);
   const [isStarred, setIsStarred] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     const loadProject = async () => {
@@ -139,11 +142,10 @@ const ProjectDetailsPage: React.FC = () => {
   const fundingProgress = project.fundingGoal > 0 ? (project.currentFunding / project.fundingGoal) * 100 : 0;
   const daysLeft = Math.ceil((new Date(project.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
   
-  const projectImage = (project.imageUrls && project.imageUrls.length > 0)
-    ? project.imageUrls[0]
-    : (project.imageHashes && project.imageHashes.length > 0
-      ? `https://gateway.pinata.cloud/ipfs/${project.imageHashes[0]}`
-      : 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&h=400&fit=crop');
+  const galleryUrls = getImageList(project) || [];
+  const projectImage = galleryUrls.length > 0
+    ? (galleryUrls[selectedImageIndex] || galleryUrls[0])
+    : (getPrimaryImage(project) || 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&h=400&fit=crop');
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LightBulbIcon },
@@ -247,6 +249,27 @@ const ProjectDetailsPage: React.FC = () => {
                 </div>
               </div>
             </div>
+            {/* Thumbnails */}
+            {galleryUrls.length > 1 && (
+              <div className="px-6 py-4 bg-white border-t border-gray-100 flex items-center space-x-3 overflow-x-auto">
+                {galleryUrls.map((url, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => { setSelectedImageIndex(idx); }}
+                    className={`w-20 h-12 rounded-lg overflow-hidden border ${selectedImageIndex === idx ? 'ring-2 ring-blue-500' : 'border-gray-200'}`}
+                  >
+                    <img src={url} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Simple Lightbox */}
+            {lightboxOpen && (
+              <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setLightboxOpen(false)}>
+                <img src={projectImage} alt="Full" className="max-h-full max-w-full rounded-lg shadow-2xl" />
+              </div>
+            )}
           </div>
         </motion.div>
 

@@ -223,10 +223,33 @@ const CreateProjectPage: React.FC = () => {
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length > 0) {
-      updateFormData('images', [...formData.images, ...files]);
-      
+      // Enforce maximum of 5 images
+      const total = formData.images.length + files.length;
+      if (total > 5) {
+        toast.error('You can upload up to 5 images per project');
+        return;
+      }
+
+      // Validate file types and sizes (10MB limit)
+      const validFiles: File[] = [];
+      for (const f of files) {
+        if (!f.type.startsWith('image/')) {
+          toast.error(`Invalid file type: ${f.name}`);
+          continue;
+        }
+        if (f.size > 10 * 1024 * 1024) {
+          toast.error(`File too large (max 10MB): ${f.name}`);
+          continue;
+        }
+        validFiles.push(f);
+      }
+
+      if (validFiles.length === 0) return;
+
+      updateFormData('images', [...formData.images, ...validFiles]);
+
       // Create preview URLs
-      const newImageUrls = files.map(file => URL.createObjectURL(file));
+      const newImageUrls = validFiles.map(file => URL.createObjectURL(file));
       updateFormData('imageUrls', [...formData.imageUrls, ...newImageUrls]);
     }
   };

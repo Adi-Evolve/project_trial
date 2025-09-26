@@ -19,6 +19,7 @@ import {
 import { Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../context/AuthContext';
+import { getPrimaryImage } from '../utils/image';
 import { toast } from 'react-hot-toast';
 
 interface User {
@@ -251,7 +252,7 @@ const FollowingPage: React.FC = () => {
         id: project.id,
         title: project.title,
         description: project.description,
-        image: project.image_urls?.[0],
+        image: getPrimaryImage(project),
         author: {
           name: project.creator?.full_name || 'Anonymous',
           avatar: project.creator?.avatar_url || '/default-avatar.png'
