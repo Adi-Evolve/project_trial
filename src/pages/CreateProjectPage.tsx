@@ -261,6 +261,9 @@ const CreateProjectPage: React.FC = () => {
     updateFormData('imageUrls', newImageUrls);
   };
 
+  // Debug state for error object
+  const [debugError, setDebugError] = useState<any>(null);
+
   const handleSubmit = async () => {
     if (!user) {
       toast.error('Please log in to create a project');
@@ -271,6 +274,7 @@ const CreateProjectPage: React.FC = () => {
     let projectId: string | null = null;
     
     try {
+      setDebugError(null);
       // Validate required fields
       if (!formData.title || !formData.description || !formData.category || !formData.fundingGoal || !formData.deadline) {
         toast.error('Please fill in all required fields');
@@ -365,18 +369,19 @@ const CreateProjectPage: React.FC = () => {
       
       // Create project data for localStorage
       const projectData = {
-        id: projectId,
-        title: formData.title,
-        description: formData.description,
-        longDescription: formData.longDescription,
-        creatorId: user.id || user.walletAddress || 'anonymous',
-        creatorName: user.email || 'Anonymous',
+  id: projectId,
+  title: formData.title,
+  description: formData.description,
+  longDescription: formData.longDescription,
+  creatorId: user.id || 'anonymous', // Always Supabase UUID
+  creatorName: user.email || 'Anonymous',
+  creatorWalletAddress: user.walletAddress || '', // Always save wallet address
         category: formData.category,
         tags: formData.tags,
         demoUrl: formData.demoUrl,
         videoUrl: formData.videoUrl,
-  imageHashes,
-  imageUrls,
+        imageHashes,
+        imageUrls,
         fundingGoal: formData.fundingGoal,
         currentFunding: 0,
         deadline: formData.deadline,
@@ -390,10 +395,60 @@ const CreateProjectPage: React.FC = () => {
         blockchainRecord: undefined, // Will be updated after blockchain registration
         status: 'active' as const
       };
+      console.log('Using creatorId (Supabase UUID):', user.id);
 
       // Save project to both localStorage and Supabase
+      // PATCH: Blockchain registration must happen before Supabase save
+      let blockchainResult = null;
+      // Connect wallet first if not connected
+      const account = await web3Service.getAccount();
+      if (!account) {
+        toast.loading('Connecting to your wallet...');
+        const connectResult = await web3Service.connectWallet();
+        toast.dismiss();
+        if (!connectResult.success) {
+          setDebugError(connectResult.error);
+          console.error('Failed to connect wallet for blockchain registration:', connectResult.error);
+          toast.error(`Wallet connection failed: ${connectResult.error || 'Unknown error'}`);
+          throw new Error(`Wallet connection failed: ${connectResult.error || 'Unknown error'}`);
+        }
+      }
+
+      // Register project on blockchain for funding compatibility
+      toast.loading('Please confirm the transaction in your wallet...');
+      const web3Result = await web3Service.createProject(
+        projectId,
+        (formData.fundingGoal / 1000).toString(), // Convert USD to ETH estimate (rough conversion)
+        new Date(formData.deadline)
+      );
+      toast.dismiss();
+
+      if (web3Result.success && web3Result.transactionHash) {
+        blockchainResult = {
+          txHash: web3Result.transactionHash,
+          blockNumber: 0, // Will be updated when transaction is mined
+          gasUsed: '0',
+          gasPrice: '0'
+        };
+        console.log('✅ Project registered on blockchain:', web3Result.transactionHash);
+      } else {
+        setDebugError(web3Result.error);
+        console.warn('⚠️ Web3 registration failed, falling back to mock:', web3Result.error);
+        toast.error(`Blockchain registration failed: ${web3Result.error || 'Unknown error'}`);
+        // Fall back to mock service if web3 registration fails
+        blockchainResult = await mockBlockchainService.registerProject({
+          id: projectId,
+          title: formData.title,
+          description: formData.description,
+          author: user.walletAddress || '',
+          timestamp: new Date().toISOString(),
+          category: formData.category,
+          tags: formData.tags
+        });
+      }
+
+      // Only save to Supabase if blockchain registration succeeded
       toast.loading('Creating project...');
-      
       console.log('🚀 CREATING PROJECT - Starting save process...');
       console.log('📊 Project data to save:', {
         id: projectData.id,
@@ -402,113 +457,52 @@ const CreateProjectPage: React.FC = () => {
         category: projectData.category,
         fundingGoal: projectData.fundingGoal
       });
-      
+
       // Add milestone_check = false on project creation
       const projectDataWithMilestoneCheck = {
-        ...projectData,
-        milestone_check: false
+  ...projectData,
+  milestone_check: false,
+  blockchain_tx_hash: blockchainResult?.txHash || '',
+  blockchain_block_number: blockchainResult?.blockNumber || 0,
+  creator_wallet_address: projectData.creatorWalletAddress // PATCH: ensure field is present in DB
       };
-      
-  const saveResult = await enhancedProjectService.saveProject(projectDataWithMilestoneCheck);
+
+      const saveResult = await enhancedProjectService.saveProject(projectDataWithMilestoneCheck);
       toast.dismiss();
-      
+
       console.log('💾 SAVE RESULT:', saveResult);
 
       if (!saveResult.success || !saveResult.project) {
+        setDebugError(saveResult.error);
         console.error('❌ Project save failed:', saveResult.error);
         throw new Error(saveResult.error || 'Failed to create project');
       }
 
       const savedProject = saveResult.project;
-
-      // Register project on blockchain
-      let blockchainResult = null;
-      try {
-        toast.loading('Finalizing project...');
-
-        // Register project on blockchain using web3Service (for funding compatibility)
+      // Also try advanced contracts if enabled (optional - for additional features)
+      if (process.env.REACT_APP_ENABLE_REAL_CONTRACTS === 'true') {
         try {
-          // Connect wallet first if not connected
-          const account = await web3Service.getAccount();
-          if (!account) {
-            const connectResult = await web3Service.connectWallet();
-            if (!connectResult.success) {
-              console.warn('Failed to connect wallet for blockchain registration:', connectResult.error);
-              throw new Error('Please connect your wallet to register the project on blockchain');
-            }
-          }
-
-          // Register project on blockchain for funding compatibility
-          const web3Result = await web3Service.createProject(
-            projectId,
-            (formData.fundingGoal / 1000).toString(), // Convert USD to ETH estimate (rough conversion)
-            new Date(formData.deadline)
+          await advancedContractService.initialize();
+          const deadline = Math.floor(new Date(formData.deadline).getTime() / 1000);
+          const goalAmountStr = (formData.fundingGoal / 1000).toString(); // Convert USD to ETH estimate
+          const tx = await advancedContractService.createCampaign(
+            CampaignType.PROJECT,
+            formData.title,
+            formData.description,
+            metadataResult.ipfsHash,
+            goalAmountStr,
+            deadline,
+            [],
+            [],
+            []
           );
-
-          if (web3Result.success && web3Result.transactionHash) {
-            blockchainResult = {
-              txHash: web3Result.transactionHash,
-              blockNumber: 0, // Will be updated when transaction is mined
-              gasUsed: '0',
-              gasPrice: '0'
-            };
-            
-            console.log('✅ Project registered on blockchain:', web3Result.transactionHash);
-          } else {
-            console.warn('⚠️ Web3 registration failed, falling back to mock:', web3Result.error);
-            // Fall back to mock service if web3 registration fails
-            blockchainResult = await mockBlockchainService.registerProject({
-              id: projectId,
-              title: formData.title,
-              description: formData.description,
-              author: user.walletAddress || '',
-              timestamp: new Date().toISOString(),
-              category: formData.category,
-              tags: formData.tags
-            });
-          }
-        } catch (web3Error: any) {
-          console.warn('⚠️ Web3 registration failed, using mock blockchain:', web3Error.message);
-          
-          // Fall back to mock blockchain service
-          blockchainResult = await mockBlockchainService.registerProject({
-            id: projectId,
-            title: formData.title,
-            description: formData.description,
-            author: user.walletAddress || '',
-            timestamp: new Date().toISOString(),
-            category: formData.category,
-            tags: formData.tags
-          });
+          console.log('✅ Project also registered with advanced contracts:', tx.hash);
+        } catch (advancedError) {
+          console.warn('⚠️ Advanced contract registration failed:', advancedError);
+          // This is optional, so we don't fail the whole process
         }
-
-        // Also try advanced contracts if enabled (optional - for additional features)
-        if (process.env.REACT_APP_ENABLE_REAL_CONTRACTS === 'true') {
-          try {
-            await advancedContractService.initialize();
-            
-            const deadline = Math.floor(new Date(formData.deadline).getTime() / 1000);
-            const goalAmountStr = (formData.fundingGoal / 1000).toString(); // Convert USD to ETH estimate
-            
-            const tx = await advancedContractService.createCampaign(
-              CampaignType.PROJECT,
-              formData.title,
-              formData.description,
-              metadataResult.ipfsHash,
-              goalAmountStr,
-              deadline,
-              [],
-              [],
-              []
-            );
-
-            console.log('✅ Project also registered with advanced contracts:', tx.hash);
-          } catch (advancedError) {
-            console.warn('⚠️ Advanced contract registration failed:', advancedError);
-            // This is optional, so we don't fail the whole process
-          }
-        }
-        toast.dismiss();
+      }
+      toast.dismiss();
 
         if (blockchainResult && blockchainResult.txHash) {
 
@@ -597,45 +591,14 @@ const CreateProjectPage: React.FC = () => {
           toast.error('⚠️ Oracle verification unavailable, but project was created');
         }
         
-      } catch (blockchainError: any) {
-        console.error('Blockchain registration failed:', blockchainError);
-        toast.success('🎉 Project created successfully!');
-      }
-
       // Redirect to projects page
       setTimeout(() => {
         navigate('/projects');
       }, 3000);
-
     } catch (error: any) {
+      setDebugError(error);
       console.error('Project creation error:', error);
-      
-      // Enhanced error reporting
-      const errorMessage = error.message || 'Failed to create project. Please try again.';
-      const errorDetails = {
-        error: error,
-        formData: {
-          title: formData.title,
-          category: formData.category,
-          hasImages: formData.images.length > 0,
-          hasUser: !!user
-        },
-        projectId,
-        timestamp: new Date().toISOString()
-      };
-      
-      console.error('Detailed error information:', errorDetails);
-      toast.error(`❌ ${errorMessage}`);
-      
-      // Show additional help for common errors
-      if (errorMessage.includes('MetaMask')) {
-        toast.error('💡 Make sure MetaMask is installed and connected');
-      } else if (errorMessage.includes('IPFS')) {
-        toast.error('💡 IPFS upload failed - check your internet connection');
-      } else if (errorMessage.includes('localStorage')) {
-        toast.error('💡 Local storage issue - try clearing browser data');
-      }
-      
+      toast.error('Project creation failed. Please check the debug panel for details.');
     } finally {
       setIsSubmitting(false);
     }
@@ -1249,6 +1212,15 @@ const CreateProjectPage: React.FC = () => {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Debug-only error panel (visible only in dev) */}
+        {process.env.NODE_ENV !== 'production' && debugError && (
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded-lg">
+            <h3 className="text-lg font-bold text-red-700 dark:text-red-200 mb-2">Debug Error Panel</h3>
+            <pre className="text-xs text-red-800 dark:text-red-100 overflow-x-auto whitespace-pre-wrap">
+              {typeof debugError === 'string' ? debugError : JSON.stringify(debugError, null, 2)}
+            </pre>
+          </div>
+        )}
         {/* Progress Steps */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -1263,18 +1235,8 @@ const CreateProjectPage: React.FC = () => {
                     {currentStep > step.number ? (
                       <CheckCircleIcon className="w-5 h-5" />
                     ) : (
-                      <span className="text-sm font-medium">{step.number}</span>
+                      <span className="font-bold text-lg">{step.number}</span>
                     )}
-                  </div>
-                  <div className="ml-3 hidden sm:block">
-                    <p className={`text-sm font-medium ${
-                      currentStep >= step.number
-                        ? 'text-blue-600 dark:text-blue-400'
-                        : 'text-gray-500 dark:text-gray-400'
-                    }`}>
-                      {step.title}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{step.description}</p>
                   </div>
                 </div>
                 {index < steps.length - 1 && (

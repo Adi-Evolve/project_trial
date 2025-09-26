@@ -83,26 +83,34 @@ class EnhancedProjectService {
       // Step 2: Save to Supabase with correct schema mapping
       try {
         const supabaseId = await this.saveProjectToSupabase(savedProject);
-        
+
         if (supabaseId) {
           console.log('✅ Project saved to Supabase with ID:', supabaseId);
+          return {
+            success: true,
+            project: savedProject,
+            supabaseId: supabaseId
+          };
         }
 
+        // If saveProjectToSupabase returned null-ish, treat as failure
+        console.error('❌ Supabase save returned no ID - treating as failure');
+        toast.error('Project saved locally but failed to sync to database (no ID returned)');
         return {
-          success: true,
+          success: false,
           project: savedProject,
-          supabaseId: supabaseId || undefined
+          error: 'Database sync failed: no ID returned'
         };
 
       } catch (supabaseError) {
         console.error('❌ Supabase save failed:', supabaseError);
+        // Surface a more detailed error to the caller so the UI can display it
+        const message = supabaseError instanceof Error ? supabaseError.message : JSON.stringify(supabaseError);
         toast.error('Project saved locally but failed to sync to database');
-        
-        // Still return success since localStorage save worked
         return {
-          success: true,
+          success: false,
           project: savedProject,
-          error: `Database sync failed: ${supabaseError instanceof Error ? supabaseError.message : 'Unknown error'}`
+          error: `Database sync failed: ${message}`
         };
       }
 

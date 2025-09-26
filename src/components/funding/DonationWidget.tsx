@@ -284,40 +284,77 @@ const DonationWidget: React.FC<DonationWidgetProps> = ({
         // Prefer the explicit projects.creator_wallet_address column (present in migrations).
         if (!creatorWalletAddress) {
           try {
+            // PATCH: Use correct Supabase filter syntax for project lookup
             const { data: projectRow, error: projErr } = await supabase
               .from('projects')
               .select('id, creator_id, creator_wallet_address, blockchain_id')
-              .or(`id.eq.${projectId},blockchain_id.eq.${projectId}`)
+              .eq('id', projectId)
               .limit(1)
               .single();
+            // If not found by id, try blockchain_id
+            let finalProjectRow = projectRow;
+            let finalError = projErr;
+            if (!finalProjectRow) {
+              const { data: altProjectRow, error: altProjErr } = await supabase
+                .from('projects')
+                .select('id, creator_id, creator_wallet_address, blockchain_id')
+                .eq('blockchain_id', projectId)
+                .limit(1)
+                .single();
+              if (altProjectRow) {
+                finalProjectRow = altProjectRow;
+                finalError = altProjErr;
+              }
+            }
+            if (!finalProjectRow) {
+              console.error('❌ Supabase project query failed:', finalError);
+              toast.error('Could not find project in database. Please check your Supabase schema and RLS policies.');
+              throw new Error('Project not found in Supabase. See console for details.');
+            }
 
             if (!projErr && projectRow) {
               // Use the explicit creator_wallet_address if present
               if (projectRow.creator_wallet_address && web3Service.isValidAddress(projectRow.creator_wallet_address)) {
                 creatorWalletAddress = projectRow.creator_wallet_address;
+                console.log('✅ Found creator_wallet_address in projects:', creatorWalletAddress);
               } else if (projectRow.creator_id) {
                 const creatorIdVal = projectRow.creator_id as string;
-                // If creator_id already contains a wallet address, accept it
-                if (creatorIdVal && web3Service.isValidAddress(creatorIdVal)) {
-                  creatorWalletAddress = creatorIdVal;
-                } else if (creatorIdVal && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(creatorIdVal)) {
-                  // Lookup user by UUID to get wallet_address
-                  const { data: userRow } = await supabase
+                // If creator_id is a UUID, lookup user by id in users table
+                if (creatorIdVal && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(creatorIdVal)) {
+                  const { data: userRow, error: userErr } = await supabase
                     .from('users')
                     .select('wallet_address')
                     .eq('id', creatorIdVal)
                     .single();
-                  creatorWalletAddress = userRow?.wallet_address;
+                  if (userRow?.wallet_address && web3Service.isValidAddress(userRow.wallet_address)) {
+                    creatorWalletAddress = userRow.wallet_address;
+                    console.log('✅ Found wallet_address in users by id:', creatorWalletAddress);
+                  } else {
+                    console.warn('❌ No valid wallet_address found in users for creator_id:', creatorIdVal);
+                  }
+                } else if (creatorIdVal && web3Service.isValidAddress(creatorIdVal)) {
+                  // If creator_id is already a wallet address
+                  creatorWalletAddress = creatorIdVal;
+                  console.log('✅ creator_id is a wallet address:', creatorWalletAddress);
                 } else {
                   // As a last resort, attempt to find a user with this string as wallet_address
-                  const { data: userRow } = await supabase
+                  const { data: userRow, error: userErr } = await supabase
                     .from('users')
                     .select('wallet_address')
                     .eq('wallet_address', creatorIdVal)
                     .single();
-                  creatorWalletAddress = userRow?.wallet_address;
+                  if (userRow?.wallet_address && web3Service.isValidAddress(userRow.wallet_address)) {
+                    creatorWalletAddress = userRow.wallet_address;
+                    console.log('✅ Found wallet_address in users by wallet_address:', creatorWalletAddress);
+                  } else {
+                    console.warn('❌ No valid wallet_address found in users for creatorIdVal:', creatorIdVal);
+                  }
                 }
+              } else {
+                console.warn('❌ No creator_id found in projectRow');
               }
+            } else {
+              console.warn('❌ No projectRow found for projectId:', projectId);
             }
           } catch (err) {
             console.warn('Failed to resolve creator wallet address from Supabase/enhancedProjectService:', err);
