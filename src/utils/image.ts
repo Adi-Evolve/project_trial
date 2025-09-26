@@ -4,7 +4,8 @@ export function getImageList(project: any): string[] {
   if (!project) return urls;
 
   // Support both snake_case (db rows) and camelCase (mapped objects)
-  const arrCandidates = project.image_urls || project.imageUrls || [];
+  // Also support 'images' field (array of URLs)
+  const arrCandidates = project.image_urls || project.imageUrls || project.images || [];
   if (Array.isArray(arrCandidates) && arrCandidates.length > 0) {
     urls.push(...arrCandidates.filter(Boolean));
   }
