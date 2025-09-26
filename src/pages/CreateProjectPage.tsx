@@ -80,6 +80,8 @@ const CreateProjectPage: React.FC = () => {
   const [newTag, setNewTag] = useState('');
   const [newTech, setNewTech] = useState('');
   const [newFeature, setNewFeature] = useState('');
+  // Disclosure agreement checkpoint
+  const [disclosureChecked, setDisclosureChecked] = useState(false);
 
   const [formData, setFormData] = useState<ProjectFormData>({
     title: '',
@@ -1283,7 +1285,32 @@ const CreateProjectPage: React.FC = () => {
               Previous
             </button>
 
-            <div className="flex space-x-3">
+            <div className="flex flex-col space-y-4 w-full">
+              {/* Disclosure Agreement Checkpoint - only show on final step */}
+              {currentStep === steps.length && (
+                <div className="disclosure-agreement mb-4 p-4 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900/10">
+                  <h3 className="font-bold mb-2 text-gray-800 dark:text-gray-100">Disclosure Agreement</h3>
+                  <div className="text-sm text-gray-700 dark:text-gray-200 mb-3">
+                    <strong>Your Promise:</strong> You guarantee that the project you are uploading is your own original work and does not copy anyone else's intellectual property.<br /><br />
+                    <strong>Investigation:</strong> If your project is reported for being a copy, our team will investigate the claim.<br /><br />
+                    <strong>Consequences of Copying:</strong> If we find you have copied someone else's project, we can take immediate action. This may include:<br />
+                    - Shutting down your project.<br />
+                    - Freezing and returning all funds to backers.<br />
+                    - Banning you from the platform permanently.<br /><br />
+                    <strong>Legal Action:</strong> We reserve the right to take legal action against you for violating this agreement, which could result in you being held liable for damages.<br /><br />
+                    <strong>Your Responsibility:</strong> You are legally and financially responsible for any claims made against our platform because of your copied project.
+                  </div>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={disclosureChecked}
+                      onChange={e => setDisclosureChecked(e.target.checked)}
+                      className="form-checkbox h-4 w-4 text-blue-600"
+                    />
+                    <span className="text-gray-900 dark:text-gray-100">I have read and agree to the disclosure agreement above.</span>
+                  </label>
+                </div>
+              )}
               {currentStep < steps.length ? (
                 <motion.button
                   onClick={nextStep}
@@ -1296,7 +1323,7 @@ const CreateProjectPage: React.FC = () => {
               ) : (
                 <motion.button
                   onClick={handleSubmit}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !disclosureChecked}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   className="flex items-center space-x-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
