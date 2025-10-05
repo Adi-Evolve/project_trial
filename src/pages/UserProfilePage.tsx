@@ -106,187 +106,21 @@ const UserProfilePage: React.FC = () => {
     { id: 'activity', name: 'Activity', count: profile?.recentActivity.length || 0 }
   ];
 
-  // Mock user profile data
+  // TODO: Replace with real Supabase fetch for user profile data
   useEffect(() => {
     const fetchProfile = async () => {
       setLoading(true);
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const mockProfile: UserProfile = {
-          id: userId || '1',
-          name: 'Sarah Chen',
-          fullName: 'Sarah Chen',
-          email: 'sarah.chen@example.com',
-          avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b563?w=300&h=300&fit=crop&crop=face',
-          username: 'sarahchen',
-          location: 'San Francisco, CA',
-          skills: ['React', 'Node.js', 'Python', 'Machine Learning', 'UI/UX Design', 'PostgreSQL'],
-          fieldsOfInterest: ['Artificial Intelligence', 'Sustainable Technology', 'Open Source', 'Developer Tools'],
-          reputation: 1432,
-          verified: true,
-          createdAt: '2023-06-15T10:30:00Z',
-          updatedAt: '2024-01-20T14:45:00Z',
-          joinedAt: '2023-06-15T10:30:00Z',
-          lastActive: '2024-01-20T14:45:00Z',
-          bio: 'Passionate full-stack developer with 5+ years of experience building scalable web applications. I love working on AI/ML projects and contributing to open source. Always excited to collaborate on innovative projects that make a positive impact.',
-          website: 'https://sarahchen.dev',
-          github: 'https://github.com/sarahchen',
-          linkedin: 'https://linkedin.com/in/sarahchen',
-          twitter: 'https://twitter.com/sarahchen',
-          expertise: ['React', 'Node.js', 'Python', 'Machine Learning', 'UI/UX Design', 'PostgreSQL'],
-          interests: ['Artificial Intelligence', 'Sustainable Technology', 'Open Source', 'Developer Tools'],
-          projects: [
-            {
-              id: '1',
-              title: 'AI Task Manager',
-              description: 'Intelligent task management with ML-powered prioritization',
-              category: 'Productivity',
-              status: 'active',
-              image: 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=400&h=250&fit=crop',
-              role: 'Creator',
-              createdAt: '2024-01-10T10:00:00Z',
-              views: 1250,
-              likes: 89,
-              isLiked: false
-            },
-            {
-              id: '2',
-              title: 'EcoTracker',
-              description: 'Carbon footprint tracking and reduction recommendations',
-              category: 'Environment',
-              status: 'completed',
-              image: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=400&h=250&fit=crop',
-              role: 'Creator',
-              createdAt: '2023-11-05T15:30:00Z',
-              views: 2100,
-              likes: 156,
-              isLiked: true
-            },
-            {
-              id: '3',
-              title: 'DevFlow',
-              description: 'Developer workflow optimization tool',
-              category: 'Developer Tools',
-              status: 'in_progress',
-              image: 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=400&h=250&fit=crop',
-              role: 'Creator',
-              createdAt: '2023-09-20T12:15:00Z',
-              views: 890,
-              likes: 67,
-              isLiked: false
-            }
-          ],
-          collaborations: [
-            {
-              id: '4',
-              title: 'OpenMind',
-              description: 'Mental health support platform with AI chatbot',
-              category: 'Healthcare',
-              status: 'active',
-              image: 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=250&fit=crop',
-              role: 'Frontend Developer',
-              createdAt: '2023-12-01T09:00:00Z',
-              views: 1800,
-              likes: 134,
-              isLiked: true
-            },
-            {
-              id: '5',
-              title: 'CodeMentor',
-              description: 'Peer-to-peer programming mentorship platform',
-              category: 'Education',
-              status: 'completed',
-              image: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=400&h=250&fit=crop',
-              role: 'Full Stack Developer',
-              createdAt: '2023-08-10T14:20:00Z',
-              views: 3200,
-              likes: 245,
-              isLiked: false
-            }
-          ],
-          following: 156,
-          followers: 342,
-          isFollowing: false,
-          statistics: {
-            totalProjects: 3,
-            totalContributions: 2,
-            totalViews: 9240,
-            totalLikes: 691,
-            completionRate: 85,
-            averageRating: 4.7
-          },
-          achievements: [
-            {
-              id: '1',
-              title: 'First Project',
-              description: 'Created your first project',
-              icon: '🚀',
-              rarity: 'common',
-              earnedAt: '2023-06-20T12:00:00Z'
-            },
-            {
-              id: '2',
-              title: 'Team Player',
-              description: 'Joined 5 collaborative projects',
-              icon: '🤝',
-              rarity: 'rare',
-              earnedAt: '2023-09-15T16:30:00Z'
-            },
-            {
-              id: '3',
-              title: 'Innovation Master',
-              description: 'Created a project with 100+ likes',
-              icon: '💡',
-              rarity: 'epic',
-              earnedAt: '2023-11-10T11:45:00Z'
-            },
-            {
-              id: '4',
-              title: 'Community Leader',
-              description: 'Gained 300+ followers',
-              icon: '👑',
-              rarity: 'legendary',
-              earnedAt: '2024-01-05T09:15:00Z'
-            }
-          ],
-          recentActivity: [
-            {
-              id: '1',
-              type: 'project_created',
-              description: 'Created new project "AI Task Manager"',
-              timestamp: '2024-01-10T10:00:00Z'
-            },
-            {
-              id: '2',
-              type: 'milestone_completed',
-              description: 'Completed milestone "Beta Release" in EcoTracker',
-              timestamp: '2024-01-08T14:30:00Z'
-            },
-            {
-              id: '3',
-              type: 'project_joined',
-              description: 'Joined OpenMind as Frontend Developer',
-              timestamp: '2023-12-01T09:00:00Z'
-            },
-            {
-              id: '4',
-              type: 'user_followed',
-              description: 'Started following @alexdev',
-              timestamp: '2023-11-28T16:20:00Z'
-            },
-            {
-              id: '5',
-              type: 'project_liked',
-              description: 'Liked "Smart Home Controller" by @mikejones',
-              timestamp: '2023-11-25T13:45:00Z'
-            }
-          ]
-        };
-
-        setProfile(mockProfile);
-        setFollowing(mockProfile.isFollowing || false);
+        // Example: Fetch user profile from Supabase
+        // const { data, error } = await supabase
+        //   .from('profiles')
+        //   .select('*')
+        //   .eq('id', userId)
+        //   .single();
+        // if (error) throw error;
+        // setProfile(data as UserProfile);
+        // setFollowing(data?.isFollowing || false);
+        setProfile(null); // Remove this line after implementing real fetch
       } catch (error) {
         console.error('Error fetching profile:', error);
         toast.error('Failed to load user profile');
@@ -294,7 +128,6 @@ const UserProfilePage: React.FC = () => {
         setLoading(false);
       }
     };
-
     fetchProfile();
   }, [userId]);
 

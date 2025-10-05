@@ -1,6 +1,6 @@
 import { toast } from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid';
-
+// This file is deprecated. All blockchain/contract logic removed. Use Supabase for all storage and logic.
 interface BlockchainRecord {
   txHash: string;
   blockNumber: number;

@@ -22,6 +22,7 @@ import {
   CheckCircleIcon as CheckCircleIconSolid
 } from '@heroicons/react/24/solid';
 import { useAuth } from '../context/AuthContext';
+import { useChat } from '../context/ChatContext';
 import { toast } from 'react-hot-toast';
 
 interface User {
@@ -53,24 +54,11 @@ interface Attachment {
   size: number;
 }
 
-interface Conversation {
-  id: string;
-  participants: User[];
-  lastMessage?: Message;
-  unreadCount: number;
-  isPinned: boolean;
-  isArchived: boolean;
-  createdAt: string;
-  type: 'direct' | 'group';
-  name?: string; // For group conversations
-  description?: string;
-}
+// Conversations come from ChatContext (Chat). Use flexible typing here.
 
 const MessagesPage: React.FC = () => {
   const { user: currentUser } = useAuth();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversation, setActiveConversation] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { chats, activeChat, setActiveChat, messages: chatMessages, sendMessage, markAsRead } = useChat();
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -78,245 +66,20 @@ const MessagesPage: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Mock data
+  // ChatProvider handles loading
   useEffect(() => {
-    const mockConversations: Conversation[] = [
-      {
-        id: '1',
-        type: 'direct',
-        participants: [
-          {
-            id: '2',
-            name: 'Alex Rodriguez',
-            username: 'alexdev',
-            avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-            isOnline: true
-          }
-        ],
-        lastMessage: {
-          id: '1',
-          content: 'Hey! I saw your AI project, would love to collaborate on it. Do you have some time to discuss?',
-          senderId: '2',
-          timestamp: '2024-01-20T14:30:00Z',
-          type: 'text',
-          read: false
-        },
-        unreadCount: 2,
-        isPinned: true,
-        isArchived: false,
-        createdAt: '2024-01-18T09:00:00Z'
-      },
-      {
-        id: '2',
-        type: 'direct',
-        participants: [
-          {
-            id: '3',
-            name: 'Sarah Chen',
-            username: 'sarahchen',
-            avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b563?w=150&h=150&fit=crop&crop=face',
-            isOnline: false,
-            lastSeen: '2024-01-20T12:15:00Z'
-          }
-        ],
-        lastMessage: {
-          id: '2',
-          content: 'Thanks for the feedback on the UI mockups! I\'ll update them based on your suggestions.',
-          senderId: '3',
-          timestamp: '2024-01-20T11:45:00Z',
-          type: 'text',
-          read: true
-        },
-        unreadCount: 0,
-        isPinned: false,
-        isArchived: false,
-        createdAt: '2024-01-15T14:20:00Z'
-      },
-      {
-        id: '3',
-        type: 'group',
-        name: 'EcoTracker Team',
-        description: 'Discussion for the EcoTracker project',
-        participants: [
-          {
-            id: '4',
-            name: 'Mike Johnson',
-            username: 'mikej',
-            avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
-            isOnline: true
-          },
-          {
-            id: '5',
-            name: 'Emily Davis',
-            username: 'emilyd',
-            avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
-            isOnline: false,
-            lastSeen: '2024-01-20T10:30:00Z'
-          },
-          {
-            id: '6',
-            name: 'David Kim',
-            username: 'davidk',
-            avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face',
-            isOnline: true
-          }
-        ],
-        lastMessage: {
-          id: '3',
-          content: 'Great progress on the API integration! The carbon tracking feature is working perfectly.',
-          senderId: '4',
-          timestamp: '2024-01-20T09:20:00Z',
-          type: 'text',
-          read: true
-        },
-        unreadCount: 0,
-        isPinned: false,
-        isArchived: false,
-        createdAt: '2024-01-10T16:45:00Z'
-      },
-      {
-        id: '4',
-        type: 'direct',
-        participants: [
-          {
-            id: '7',
-            name: 'Lisa Wang',
-            username: 'lisawang',
-            avatar: 'https://images.unsplash.com/photo-1534751516642-a1af1ef26a56?w=150&h=150&fit=crop&crop=face',
-            isOnline: false,
-            lastSeen: '2024-01-19T18:00:00Z'
-          }
-        ],
-        lastMessage: {
-          id: '4',
-          content: 'The blockchain integration looks solid. Let me know when you\'re ready for the smart contract review.',
-          senderId: '1',
-          timestamp: '2024-01-19T16:30:00Z',
-          type: 'text',
-          read: true
-        },
-        unreadCount: 0,
-        isPinned: false,
-        isArchived: false,
-        createdAt: '2024-01-12T11:00:00Z'
-      }
-    ];
-
-    const mockMessages: Message[] = [
-      {
-        id: '1',
-        content: 'Hi there! I hope you\'re doing well.',
-        senderId: '2',
-        timestamp: '2024-01-20T14:00:00Z',
-        type: 'text',
-        read: true
-      },
-      {
-        id: '2',
-        content: 'I saw your AI project on the platform and I\'m really impressed with the approach you\'ve taken.',
-        senderId: '2',
-        timestamp: '2024-01-20T14:05:00Z',
-        type: 'text',
-        read: true
-      },
-      {
-        id: '3',
-        content: 'Thanks! I\'ve been working on it for a few months now. What aspects interested you the most?',
-        senderId: '1',
-        timestamp: '2024-01-20T14:10:00Z',
-        type: 'text',
-        read: true
-      },
-      {
-        id: '4',
-        content: 'The machine learning model for task prioritization is fascinating. I have experience with similar algorithms and would love to contribute.',
-        senderId: '2',
-        timestamp: '2024-01-20T14:15:00Z',
-        type: 'text',
-        read: true
-      },
-      {
-        id: '5',
-        content: 'That sounds great! I could definitely use help with optimizing the ML pipeline. Are you familiar with TensorFlow?',
-        senderId: '1',
-        timestamp: '2024-01-20T14:20:00Z',
-        type: 'text',
-        read: true
-      },
-      {
-        id: '6',
-        content: 'Absolutely! I\'ve been working with TensorFlow for about 3 years now. I also have experience with PyTorch if needed.',
-        senderId: '2',
-        timestamp: '2024-01-20T14:25:00Z',
-        type: 'text',
-        read: true
-      },
-      {
-        id: '7',
-        content: 'Perfect! Would you like to schedule a call to discuss the technical details? I can show you the current architecture.',
-        senderId: '1',
-        timestamp: '2024-01-20T14:28:00Z',
-        type: 'text',
-        read: true
-      },
-      {
-        id: '8',
-        content: 'Hey! I saw your AI project, would love to collaborate on it. Do you have some time to discuss?',
-        senderId: '2',
-        timestamp: '2024-01-20T14:30:00Z',
-        type: 'text',
-        read: false
-      }
-    ];
-
-    setTimeout(() => {
-      setConversations(mockConversations);
-      setActiveConversation('1');
-      setMessages(mockMessages);
-      setLoading(false);
-    }, 1000);
-  }, []);
+    setLoading(false);
+  }, [chats]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [chatMessages, activeChat?.id]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !activeConversation) return;
-
-    const messageId = Date.now().toString();
-    const newMsg: Message = {
-      id: messageId,
-      content: newMessage.trim(),
-      senderId: currentUser?.id || '1',
-      timestamp: new Date().toISOString(),
-      type: 'text',
-      read: false
-    };
-
-    setMessages(prev => [...prev, newMsg]);
+    if (!newMessage.trim() || !activeChat) return;
+    await sendMessage(newMessage.trim(), 'text');
     setNewMessage('');
-
-    // Update conversation's last message
-    setConversations(prev => prev.map(conv => 
-      conv.id === activeConversation 
-        ? { ...conv, lastMessage: newMsg }
-        : conv
-    ));
-
-    // Simulate typing indicator and response
-    setTimeout(() => {
-      const responseMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        content: 'Thanks for your message! I\'ll get back to you soon.',
-        senderId: '2',
-        timestamp: new Date().toISOString(),
-        type: 'text',
-        read: false
-      };
-      setMessages(prev => [...prev, responseMsg]);
-    }, 2000);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -326,39 +89,40 @@ const MessagesPage: React.FC = () => {
     }
   };
 
-  const markAsRead = (conversationId: string) => {
-    setConversations(prev => prev.map(conv => 
-      conv.id === conversationId 
-        ? { ...conv, unreadCount: 0 }
-        : conv
-    ));
+  // markAsRead is provided by ChatContext
+
+  const togglePin = async (conversationId: string) => {
+    try {
+      // Use the ChatContext to toggle pin status
+      toast('Pin/unpin functionality - coming soon');
+    } catch (error) {
+      console.error('Error toggling pin:', error);
+      toast.error('Failed to update pin status');
+    }
   };
 
-  const togglePin = (conversationId: string) => {
-    setConversations(prev => prev.map(conv => 
-      conv.id === conversationId 
-        ? { ...conv, isPinned: !conv.isPinned }
-        : conv
-    ));
-    toast.success('Conversation updated');
+  const archiveConversation = async (conversationId: string) => {
+    try {
+      // Use the ChatContext to archive conversation
+      toast('Archive functionality - coming soon');
+    } catch (error) {
+      console.error('Error archiving conversation:', error);
+      toast.error('Failed to archive conversation');
+    }
   };
 
-  const archiveConversation = (conversationId: string) => {
-    setConversations(prev => prev.map(conv => 
-      conv.id === conversationId 
-        ? { ...conv, isArchived: true }
-        : conv
-    ));
-    toast.success('Conversation archived');
-  };
-
-  const getOtherParticipant = (conversation: Conversation): User | null => {
+  const getOtherParticipant = (conversation: any): User | null => {
     if (conversation.type === 'group') return null;
-    return conversation.participants[0];
+    const p: any = conversation.participants?.[0];
+    if (!p) return null;
+    if (typeof p === 'string') {
+      return { id: p, name: p, username: p, isOnline: false } as User;
+    }
+    return p as User;
   };
 
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
+  const formatTime = (timestamp: string | Date) => {
+    const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
     const now = new Date();
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
     
@@ -378,8 +142,8 @@ const MessagesPage: React.FC = () => {
     }
   };
 
-  const filteredConversations = conversations.filter(conv => {
-    if (conv.isArchived) return false;
+  const filteredConversations = chats.filter(conv => {
+    if (conv.isActive === false) return false;
     
     if (!searchQuery) return true;
     
@@ -387,18 +151,19 @@ const MessagesPage: React.FC = () => {
     
     if (conv.type === 'group') {
       return conv.name?.toLowerCase().includes(query) ||
-             conv.participants.some(p => p.name.toLowerCase().includes(query));
+             conv.participants.some((p: any) => (typeof p === 'string' ? p.toLowerCase().includes(query) : p.name?.toLowerCase().includes(query)));
     } else {
       const participant = getOtherParticipant(conv);
-      return participant?.name.toLowerCase().includes(query) ||
-             participant?.username.toLowerCase().includes(query);
+      return (participant?.name || participant?.username || '').toLowerCase().includes(query);
     }
   });
 
   // Sort conversations: pinned first, then by last message time
   const sortedConversations = filteredConversations.sort((a, b) => {
-    if (a.isPinned && !b.isPinned) return -1;
-    if (!a.isPinned && b.isPinned) return 1;
+  const aPinned = !!((a as any).isPinned);
+  const bPinned = !!((b as any).isPinned);
+    if (aPinned && !bPinned) return -1;
+    if (!aPinned && bPinned) return 1;
     
     const aTime = a.lastMessage ? new Date(a.lastMessage.timestamp).getTime() : 0;
     const bTime = b.lastMessage ? new Date(b.lastMessage.timestamp).getTime() : 0;
@@ -456,9 +221,9 @@ const MessagesPage: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-1 p-2">
-              {sortedConversations.map((conversation) => {
+                {sortedConversations.map((conversation) => {
                 const participant = getOtherParticipant(conversation);
-                const isActive = activeConversation === conversation.id;
+                const isActive = activeChat?.id === conversation.id;
                 
                 return (
                   <motion.div
@@ -470,7 +235,7 @@ const MessagesPage: React.FC = () => {
                         : 'hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                     onClick={() => {
-                      setActiveConversation(conversation.id);
+                      setActiveChat(conversation as any);
                       if (conversation.unreadCount > 0) {
                         markAsRead(conversation.id);
                       }
@@ -516,7 +281,7 @@ const MessagesPage: React.FC = () => {
                                 ? conversation.name 
                                 : participant?.name}
                             </h3>
-                            {conversation.isPinned && (
+                            {(conversation as any).isPinned && (
                               <StarIconSolid className="w-3 h-3 text-yellow-500" />
                             )}
                           </div>
@@ -562,14 +327,14 @@ const MessagesPage: React.FC = () => {
 
       {/* Chat Area */}
       <div className="flex-1 flex flex-col">
-        {activeConversation ? (
+                {activeChat ? (
           <>
             {/* Chat Header */}
             <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   {(() => {
-                    const conversation = conversations.find(c => c.id === activeConversation);
+                    const conversation: any = activeChat;
                     const participant = conversation ? getOtherParticipant(conversation) : null;
                     
                     return (
@@ -636,11 +401,10 @@ const MessagesPage: React.FC = () => {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.map((message) => {
-                const isOwnMessage = message.senderId === currentUser?.id;
-                const sender = conversations
-                  .find(c => c.id === activeConversation)
-                  ?.participants.find(p => p.id === message.senderId);
+          { (chatMessages[activeChat.id] || []).map((message: any) => {
+        const isOwnMessage = message.senderId === currentUser?.id;
+        const senderAvatar = message.senderAvatar || '';
+        const senderName = message.senderName || '';
 
                 return (
                   <motion.div
@@ -654,10 +418,10 @@ const MessagesPage: React.FC = () => {
                     }`}>
                       {!isOwnMessage && (
                         <div className="flex-shrink-0">
-                          {sender?.avatar ? (
+                          {senderAvatar ? (
                             <img
-                              src={sender.avatar}
-                              alt={sender.name}
+                              src={senderAvatar}
+                              alt={senderName}
                               className="w-6 h-6 rounded-full object-cover"
                             />
                           ) : (
@@ -714,7 +478,7 @@ const MessagesPage: React.FC = () => {
                   </button>
                 </div>
 
-                <motion.button
+                    <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={handleSendMessage}

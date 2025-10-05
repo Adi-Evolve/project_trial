@@ -1,7 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { blockchainService } from '../../services/blockchain';
 import { toast } from 'react-hot-toast';
 
+// blockchain service removed for centralized version
+// Mock blockchain service for demo purposes
+const mockBlockchainService = {
+  getCurrentAccount: async () => 'demo-account-0x123',
+  getOracleStats: async () => ({ totalNodes: 5, activeNodes: 3, totalVerifications: 100 }),
+  getCampaignCount: async () => 5,
+  connectWallet: async () => 'demo-connected-0x456',
+  switchToCorrectNetwork: async (...args: any[]) => true,
+  updateOracleParams: async (...args: any[]) => ({ success: true }),
+  registerOracleNode: async (...args: any[]) => ({ success: true, nodeId: 'demo-oracle-' + Date.now() }),
+  createCampaign: async (...args: any[]) => ({ success: true, campaignId: Date.now() }),
+  submitMilestone: async (...args: any[]) => ({ success: true, milestoneId: 'demo-milestone-' + Date.now() }),
+  requestMilestoneVerification: async (...args: any[]) => ({ success: true, requestId: Date.now() }),
+  castVote: async (...args: any[]) => ({ success: true }),
+  releaseMilestoneFunds: async (...args: any[]) => ({ success: true }),
+  getMilestoneVerificationStatus: async (...args: any[]) => ({ verified: true, votes: 5, consensus: true })
+};
+// Deprecated: All oracle/blockchain logic removed. Use centralized Supabase logic only.
 interface FullOracleSystemProps {}
 
 const FullOracleSystem: React.FC<FullOracleSystemProps> = () => {
@@ -19,15 +36,15 @@ const FullOracleSystem: React.FC<FullOracleSystemProps> = () => {
 
   const loadSystemData = async () => {
     try {
-      const account = await blockchainService.getCurrentAccount();
+      const account = await mockBlockchainService.getCurrentAccount();
       setConnectedAccount(account);
 
       // Get oracle stats
-      const stats = await blockchainService.getOracleStats();
+      const stats = await mockBlockchainService.getOracleStats();
       setSystemStats(stats);
 
       // Get campaign count
-      const count = await blockchainService.getCampaignCount();
+      const count = await mockBlockchainService.getCampaignCount();
       if (count > 0) {
         setCampaignId(count - 1); // Use latest campaign
       }
@@ -39,10 +56,10 @@ const FullOracleSystem: React.FC<FullOracleSystemProps> = () => {
   const connectWallet = async () => {
     setLoading(true);
     try {
-      const account = await blockchainService.connectWallet();
+      const account = await mockBlockchainService.connectWallet();
       setConnectedAccount(account);
       
-      const switched = await blockchainService.switchToCorrectNetwork(11155111);
+      const switched = await mockBlockchainService.switchToCorrectNetwork(11155111);
       if (switched) {
         toast.success('Connected to Sepolia testnet');
       }
@@ -63,7 +80,7 @@ const FullOracleSystem: React.FC<FullOracleSystemProps> = () => {
     setLoading(true);
     try {
       // This will only work if you're the contract owner
-      const result = await blockchainService.updateOracleParams(
+      const result = await mockBlockchainService.updateOracleParams(
         '0.1', // Minimum stake: 0.1 ETH
         1,     // Minimum votes required: 1
         3600   // Voting period: 1 hour
@@ -93,7 +110,7 @@ const FullOracleSystem: React.FC<FullOracleSystemProps> = () => {
 
     setLoading(true);
     try {
-      const result = await blockchainService.registerOracleNode(
+      const result = await mockBlockchainService.registerOracleNode(
         'https://oracle.projectforge.io/api',
         '1.0' // 1 ETH stake (standard amount)
       );
@@ -125,7 +142,7 @@ const FullOracleSystem: React.FC<FullOracleSystemProps> = () => {
 
     setLoading(true);
     try {
-      const result = await blockchainService.createCampaign(
+      const result = await mockBlockchainService.createCampaign(
         'ProjectForge Crowdfunding Campaign',
         'A revolutionary blockchain-based project funding platform with oracle-verified milestones',
         '2.0', // 2 ETH goal
@@ -162,7 +179,7 @@ const FullOracleSystem: React.FC<FullOracleSystemProps> = () => {
     setLoading(true);
     try {
       // Submit milestone to crowdfunding contract
-      const result = await blockchainService.submitMilestone(
+      const result = await mockBlockchainService.submitMilestone(
         campaignId,
         0, // First milestone
         'QmProjectForgeHash123456789ABC' // IPFS hash of milestone proof
@@ -189,7 +206,7 @@ const FullOracleSystem: React.FC<FullOracleSystemProps> = () => {
 
     try {
       // Request milestone verification from oracle
-      const result = await blockchainService.requestMilestoneVerification(
+      const result = await mockBlockchainService.requestMilestoneVerification(
         campaignId,
         0, // First milestone
         'QmProjectForgeHash123456789ABC'
@@ -216,7 +233,7 @@ const FullOracleSystem: React.FC<FullOracleSystemProps> = () => {
 
     setLoading(true);
     try {
-      const result = await blockchainService.castVote(verificationRequestId, approve);
+      const result = await mockBlockchainService.castVote(verificationRequestId, approve);
       
       if (result) {
         toast.success(`Vote cast: ${approve ? 'APPROVED' : 'REJECTED'}`);
@@ -241,7 +258,7 @@ const FullOracleSystem: React.FC<FullOracleSystemProps> = () => {
     if (!campaignId) return;
 
     try {
-      const result = await blockchainService.releaseMilestoneFunds(campaignId, 0);
+      const result = await mockBlockchainService.releaseMilestoneFunds(campaignId, 0);
       
       if (result) {
         toast.success('🎉 Milestone funds released successfully!');
@@ -260,7 +277,7 @@ const FullOracleSystem: React.FC<FullOracleSystemProps> = () => {
     if (!campaignId) return;
 
     try {
-      const status = await blockchainService.getMilestoneVerificationStatus(campaignId, 0);
+      const status = await mockBlockchainService.getMilestoneVerificationStatus(campaignId, 0);
       
       if (status) {
   toast(`Milestone Status - Verified: ${status.verified}, Consensus: ${status.consensus}`);

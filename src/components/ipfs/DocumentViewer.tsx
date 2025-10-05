@@ -34,7 +34,7 @@ import {
   Tag
 } from 'lucide-react';
 import { format } from 'date-fns';
-
+// Deprecated: All IPFS logic removed. Use Google Drive or Supabase Storage for viewing documents.
 interface DocumentViewerProps {
   userId?: string;
   campaignId?: string;

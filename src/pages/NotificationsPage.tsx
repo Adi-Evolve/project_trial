@@ -51,130 +51,22 @@ const NotificationsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [markingAllRead, setMarkingAllRead] = useState(false);
 
-  // Mock data
+  // Fetch notifications from Supabase
   useEffect(() => {
-    const mockNotifications: Notification[] = [
-      {
-        id: '1',
-        type: 'like',
-        title: 'Project Liked',
-        message: 'Sarah Chen liked your project "AI Task Manager"',
-        isRead: false,
-        createdAt: '2024-01-20T10:30:00Z',
-        actionUrl: '/projects/ai-task-manager',
-        actionText: 'View Project',
-        user: {
-          name: 'Sarah Chen',
-          avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b563?w=150'
-        },
-        project: {
-          title: 'AI Task Manager'
-        },
-        priority: 'normal'
-      },
-      {
-        id: '2',
-        type: 'collaboration',
-        title: 'Collaboration Request',
-        message: 'Marcus Rodriguez wants to collaborate on your blockchain voting project',
-        isRead: false,
-        createdAt: '2024-01-20T09:15:00Z',
-        actionUrl: '/projects/blockchain-voting/collaborate',
-        actionText: 'Review Request',
-        user: {
-          name: 'Marcus Rodriguez',
-          avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150'
-        },
-        project: {
-          title: 'Blockchain Voting System'
-        },
-        priority: 'high'
-      },
-      {
-        id: '3',
-        type: 'comment',
-        title: 'New Comment',
-        message: 'Dr. Emily Watson commented on your idea "Quantum ML Algorithm"',
-        isRead: true,
-        createdAt: '2024-01-19T16:45:00Z',
-        actionUrl: '/ideas/quantum-ml-algorithm',
-        actionText: 'View Comment',
-        user: {
-          name: 'Dr. Emily Watson',
-          avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150'
-        },
-        priority: 'normal'
-      },
-      {
-        id: '4',
-        type: 'funding',
-        title: 'Funding Milestone Reached',
-        message: 'Your project "EcoTrack" has reached 75% of its funding goal!',
-        isRead: false,
-        createdAt: '2024-01-19T14:20:00Z',
-        actionUrl: '/projects/ecotrack/funding',
-        actionText: 'View Details',
-        project: {
-          title: 'EcoTrack',
-          image: 'https://images.unsplash.com/photo-1569163139394-de4e4f43e4e5?w=150'
-        },
-        priority: 'high'
-      },
-      {
-        id: '5',
-        type: 'follow',
-        title: 'New Follower',
-        message: 'Alex Thompson started following you',
-        isRead: true,
-        createdAt: '2024-01-19T11:30:00Z',
-        actionUrl: '/profile/alex-thompson',
-        actionText: 'View Profile',
-        user: {
-          name: 'Alex Thompson',
-          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'
-        },
-        priority: 'normal'
-      },
-      {
-        id: '6',
-        type: 'idea_protected',
-        title: 'Idea Protected',
-        message: 'Your idea "Neural Network Optimizer" has been successfully protected on the blockchain',
-        isRead: true,
-        createdAt: '2024-01-18T13:45:00Z',
-        actionUrl: '/ideas/neural-network-optimizer',
-        actionText: 'View Idea',
-        priority: 'normal'
-      },
-      {
-        id: '7',
-        type: 'achievement',
-        title: 'Achievement Unlocked!',
-        message: 'You\'ve earned the "Innovator" badge for having 5 liked ideas!',
-        isRead: false,
-        createdAt: '2024-01-18T10:00:00Z',
-        actionUrl: '/profile/achievements',
-        actionText: 'View Achievements',
-        priority: 'normal'
-      },
-      {
-        id: '8',
-        type: 'system',
-        title: 'Platform Update',
-        message: 'New features available: Enhanced project analytics and improved collaboration tools',
-        isRead: true,
-        createdAt: '2024-01-17T09:00:00Z',
-        actionUrl: '/updates',
-        actionText: 'Learn More',
-        priority: 'low'
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Replace with your Supabase fetching logic
+        // Example:
+        // const { data: notificationsData } = await supabase.from('notifications').select('*');
+        // setNotifications(notificationsData || []);
+        setNotifications([]); // Empty for now, implement real fetch
+      } catch (error) {
+        setNotifications([]);
       }
-    ];
-
-    setTimeout(() => {
-      setNotifications(mockNotifications);
-      setFilteredNotifications(mockNotifications);
       setLoading(false);
-    }, 1000);
+    };
+    fetchData();
   }, []);
 
   useEffect(() => {

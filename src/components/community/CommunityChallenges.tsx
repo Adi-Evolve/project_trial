@@ -40,6 +40,7 @@ import {
   CheckCircleIcon as CheckSolid
 } from '@heroicons/react/24/solid';
 import { toast } from 'react-hot-toast';
+import supabase from '../../services/supabase';
 
 interface Challenge {
   id: string;
@@ -187,8 +188,118 @@ const CommunityChallenges: React.FC<CommunityChallengesProps> = ({
 
 
   useEffect(() => {
-    setLoading(false);
-    // TODO: Integrate real API call to fetch challenges and submissions from backend
+    let mounted = true;
+
+    const sampleData: Challenge[] = [
+      {
+        id: 'sample-1',
+        title: 'Build with ProjectForge',
+        description: 'A sample community challenge to onboard new contributors.',
+        type: 'community-project',
+        category: 'web-dev',
+        difficulty: 'beginner',
+        status: 'active',
+        startDate: new Date(Date.now() - 1000 * 60 * 60 * 24),
+        endDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
+        registrationDeadline: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3),
+        duration: '7 days',
+        maxParticipants: 100,
+        currentParticipants: 12,
+        minTeamSize: 1,
+        maxTeamSize: 5,
+        isTeamChallenge: false,
+        prizes: [
+          { position: 1, title: 'Winner', description: 'Top prize', value: '$500', xpReward: 500, badges: ['winner'] }
+        ],
+        requiredSkills: ['javascript'],
+        optionalSkills: [],
+        requirements: [],
+        theme: 'Improve onboarding',
+        rules: [],
+        judgesCriteria: [],
+        resources: [],
+        organizer: { id: 'org-1', name: 'ProjectForge', avatar: '/logo192.png', verified: true },
+        totalSubmissions: 3,
+        viewCount: 120,
+        upvotes: 8,
+        tags: ['onboarding', 'community'],
+      }
+    ];
+
+    const load = async () => {
+      try {
+        // Try to fetch from a community_challenges table (if it exists)
+        const { data, error, status } = await supabase
+          .from('community_challenges')
+          .select('*')
+          .order('start_date', { ascending: false })
+          .limit(maxDisplayCount || 50);
+
+        if (!mounted) return;
+
+        if (error && status !== 406) {
+          // table may not exist or permission issue — fallback to sample
+          console.warn('Could not load community_challenges from Supabase, using fallback', error);
+          setChallenges(sampleData);
+        } else if (data && Array.isArray(data) && data.length > 0) {
+          // Map returned rows into Challenge shape as best-effort
+          const parsed: Challenge[] = data.map((row: any) => ({
+            id: row.id || String(row.challenge_id || Math.random()),
+            title: row.title || row.name || 'Untitled Challenge',
+            description: row.description || row.summary || '',
+            type: row.type || 'community-project',
+            category: row.category || 'general',
+            difficulty: row.difficulty || 'beginner',
+            status: row.status || 'upcoming',
+            startDate: row.start_date ? new Date(row.start_date) : new Date(),
+            endDate: row.end_date ? new Date(row.end_date) : new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
+            registrationDeadline: row.registration_deadline ? new Date(row.registration_deadline) : new Date(),
+            duration: row.duration || 'TBD',
+            maxParticipants: row.max_participants,
+            currentParticipants: row.current_participants || 0,
+            minTeamSize: row.min_team_size || 1,
+            maxTeamSize: row.max_team_size || 1,
+            isTeamChallenge: !!row.is_team_challenge,
+            prizes: row.prizes || [],
+            requiredSkills: row.required_skills || [],
+            optionalSkills: row.optional_skills || [],
+            requirements: row.requirements || [],
+            theme: row.theme || '',
+            rules: row.rules || [],
+            judgesCriteria: row.judges_criteria || [],
+            resources: row.resources || [],
+            organizer: row.organizer || { id: 'org-1', name: row.organizer_name || 'Community', avatar: '/logo192.png', verified: false },
+            totalSubmissions: row.total_submissions || 0,
+            viewCount: row.view_count || 0,
+            upvotes: row.upvotes || 0,
+            tags: row.tags || [],
+            // optional fields for UX
+            isRegistered: row.is_registered || false,
+            isBookmarked: row.is_bookmarked || false,
+            isUpvoted: row.is_upvoted || false,
+            bannerImage: row.banner_image || undefined,
+            hasLiveStream: row.has_live_stream || false,
+            hasMentorship: row.has_mentorship || false,
+            isSponsored: row.is_sponsored || false,
+            sponsorLogos: row.sponsor_logos || []
+          }));
+
+          setChallenges(parsed.slice(0, maxDisplayCount || parsed.length));
+        } else {
+          setChallenges(sampleData);
+        }
+      } catch (err) {
+        console.error('Error loading community challenges', err);
+        if (!mounted) return;
+        setChallenges(sampleData);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    load();
+
+    return () => { mounted = false; };
   }, []);
 
   const getStatusColor = (status: Challenge['status']) => {

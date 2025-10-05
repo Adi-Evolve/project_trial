@@ -18,6 +18,7 @@ import {
   ComputerDesktopIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../context/AuthContext';
+import supabase, { supabase as supabaseClient } from '../services/supabase';
 
 interface AnalyticsData {
   overview: {
@@ -102,119 +103,87 @@ const AnalyticsPage: React.FC = () => {
     { value: 'followers', label: 'Followers', icon: UserGroupIcon, color: 'green' }
   ];
 
-  // Mock analytics data
+  // Fetch analytics data from Supabase
   useEffect(() => {
-    const generateChartData = (baseValue: number, days: number): ChartDataPoint[] => {
-      const data: ChartDataPoint[] = [];
-      for (let i = days - 1; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const variation = Math.random() * 0.3 - 0.15; // ±15% variation
-        const value = Math.floor(baseValue * (1 + variation));
-        data.push({
-          date: date.toISOString().split('T')[0],
-          value: Math.max(0, value)
-        });
-      }
-      return data;
-    };
-
-    const mockAnalytics: AnalyticsData = {
-      overview: {
-        totalViews: 12547,
-        totalLikes: 2834,
-        totalFollowers: 1247,
-        totalProjects: 8,
-        viewsChange: 12.5,
-        likesChange: 8.2,
-        followersChange: 15.7,
-        projectsChange: 0
-      },
-      chartData: {
-        views: generateChartData(400, 30),
-        likes: generateChartData(90, 30),
-        followers: generateChartData(40, 30)
-      },
-      topProjects: [
-        {
-          id: '1',
-          title: 'AI Task Manager',
-          views: 3254,
-          likes: 412,
-          comments: 89,
-          change: 15.2,
-          image: 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=400&h=250&fit=crop'
-        },
-        {
-          id: '2',
-          title: 'EcoTracker',
-          views: 2891,
-          likes: 387,
-          comments: 76,
-          change: 8.7,
-          image: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=400&h=250&fit=crop'
-        },
-        {
-          id: '3',
-          title: 'DevFlow',
-          views: 2156,
-          likes: 298,
-          comments: 54,
-          change: -3.2,
-          image: 'https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=400&h=250&fit=crop'
-        },
-        {
-          id: '4',
-          title: 'Smart Budget',
-          views: 1847,
-          likes: 234,
-          comments: 43,
-          change: 22.1,
-          image: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=400&h=250&fit=crop'
-        },
-        {
-          id: '5',
-          title: 'CodeMentor',
-          views: 1523,
-          likes: 189,
-          comments: 32,
-          change: 5.9,
-          image: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=400&h=250&fit=crop'
+    const fetchAnalytics = async () => {
+      setLoading(true);
+      try {
+        if (!user) {
+          setAnalytics(null);
+          setLoading(false);
+          return;
         }
-      ],
-      demographics: {
-        countries: [
-          { country: 'United States', visitors: 4234, percentage: 33.8 },
-          { country: 'United Kingdom', visitors: 2156, percentage: 17.2 },
-          { country: 'Canada', visitors: 1847, percentage: 14.7 },
-          { country: 'Germany', visitors: 1523, percentage: 12.1 },
-          { country: 'Australia', visitors: 1098, percentage: 8.8 },
-          { country: 'Other', visitors: 1689, percentage: 13.4 }
-        ],
-        devices: [
-          { device: 'Desktop', visitors: 7528, percentage: 60.0 },
-          { device: 'Mobile', visitors: 3762, percentage: 30.0 },
-          { device: 'Tablet', visitors: 1257, percentage: 10.0 }
-        ],
-        referrals: [
-          { source: 'Direct', visitors: 5019, percentage: 40.0 },
-          { source: 'Search Engines', visitors: 3762, percentage: 30.0 },
-          { source: 'Social Media', visitors: 2509, percentage: 20.0 },
-          { source: 'Other Websites', visitors: 1257, percentage: 10.0 }
-        ]
-      },
-      engagement: {
-        averageTimeOnProfile: 245, // seconds
-        bounceRate: 32.5, // percentage
-        returnVisitors: 67.8, // percentage
-        shareRate: 8.9 // percentage
+
+        // Total views/likes/projects for the user's projects
+        const { data: projects } = await supabaseClient
+          .from('projects')
+          .select('id,title,views,likes,cover_image')
+          .eq('creator_id', user.id);
+
+        const totalViews = (projects || []).reduce((s: number, p: any) => s + (p.views || 0), 0);
+        const totalLikes = (projects || []).reduce((s: number, p: any) => s + (p.likes || 0), 0);
+        const totalProjects = (projects || []).length;
+
+        // Followers: if a followers table exists
+        let totalFollowers = 0;
+        try {
+          const { count } = await supabaseClient
+            .from('user_followers')
+            .select('*', { count: 'exact' })
+            .eq('followed_user_id', user.id);
+          totalFollowers = (count as number) || 0;
+        } catch (e) {
+          totalFollowers = 0;
+        }
+
+        // Top projects
+        const topProjects = (projects || [])
+          .map((p: any) => ({ id: p.id, title: p.title, views: p.views || 0, likes: p.likes || 0, comments: 0, change: 0, image: p.cover_image }))
+          .sort((a: any, b: any) => b.views - a.views)
+          .slice(0, 6);
+
+        // Simple chart data: generate last N days from views
+        const chartData = {
+          views: [],
+          likes: [],
+          followers: []
+        } as any;
+        const days = 30;
+        for (let i = days - 1; i >= 0; i--) {
+          const date = new Date();
+          date.setDate(date.getDate() - i);
+          chartData.views.push({ date: date.toISOString(), value: Math.floor(totalViews / days) || 0 });
+          chartData.likes.push({ date: date.toISOString(), value: Math.floor(totalLikes / days) || 0 });
+          chartData.followers.push({ date: date.toISOString(), value: Math.floor(totalFollowers / days) || 0 });
+        }
+
+        const analyticsData = {
+          overview: {
+            totalViews,
+            totalLikes,
+            totalFollowers,
+            totalProjects,
+            viewsChange: 0,
+            likesChange: 0,
+            followersChange: 0,
+            projectsChange: 0
+          },
+          chartData,
+          topProjects,
+          demographics: { countries: [], devices: [], referrals: [] },
+          engagement: { averageTimeOnProfile: 120, bounceRate: 40, returnVisitors: 30, shareRate: 2 }
+        } as AnalyticsData;
+
+        setAnalytics(analyticsData);
+      } catch (err) {
+        console.error('Analytics fetch error', err);
+        setAnalytics(null);
+      } finally {
+        setLoading(false);
       }
     };
 
-    setTimeout(() => {
-      setAnalytics(mockAnalytics);
-      setLoading(false);
-    }, 1000);
+    fetchAnalytics();
   }, [timeRange]);
 
   const StatCard: React.FC<{

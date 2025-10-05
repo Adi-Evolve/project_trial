@@ -11,15 +11,18 @@ import {
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-hot-toast';
 import { supabase } from '../../services/supabase';
-import { ipfsService } from '../../services/ipfsService';
+import { googleDriveService } from '../../services/googleDriveService';
 import { advancedBlockchainService } from '../../services/advancedBlockchain';
 import { useAuth } from '../../context/AuthContext';
+import { emailService } from '../../services/emailService';
+import { sendEmailNotification } from '../../services/integrations';
 
 interface DocumentFile {
   file: File;
   preview: string;
   uploaded: boolean;
-  ipfsHash?: string;
+  fileId?: string;
+  url?: string;
 }
 
 interface EnhancedRegistrationData {
@@ -116,14 +119,14 @@ const EnhancedRegistration: React.FC<EnhancedRegistrationProps> = ({
     });
   };
 
-  const uploadDocumentToIPFS = async (file: File): Promise<string> => {
+  const uploadDocumentToDrive = async (file: File): Promise<{fileId: string, url: string}> => {
     try {
-      const validation = ipfsService.validateFile(file, 5, ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf']);
+      const validation = googleDriveService.validateFile(file, 10, ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf']);
       if (!validation.valid) {
         throw new Error(validation.error);
       }
 
-      const metadata = ipfsService.createDocumentMetadata(
+      const metadata = googleDriveService.createDocumentMetadata(
         'verification_document',
         walletAddress,
         {
@@ -133,14 +136,17 @@ const EnhancedRegistration: React.FC<EnhancedRegistrationProps> = ({
         }
       );
 
-      const result = await ipfsService.uploadFile(file, metadata);
+      const result = await googleDriveService.uploadFile(file, metadata);
       if (!result.success) {
         throw new Error(result.error);
       }
 
-      return result.ipfsHash || '';
+      return { 
+        fileId: result.fileId || '', 
+        url: result.url || '' 
+      };
     } catch (error: any) {
-      console.error('IPFS upload failed:', error);
+      console.error('Google Drive upload failed:', error);
       throw error;
     }
   };
@@ -153,14 +159,15 @@ const EnhancedRegistration: React.FC<EnhancedRegistrationProps> = ({
       for (const [docType, docData] of Object.entries(formData.documents)) {
         if (docData && !docData.uploaded) {
           toast.loading(`Uploading ${docType}...`);
-          const ipfsHash = await uploadDocumentToIPFS(docData.file);
+          const {fileId, url} = await uploadDocumentToDrive(docData.file);
           updatedDocs[docType as keyof typeof updatedDocs] = {
             ...docData,
             uploaded: true,
-            ipfsHash
+            fileId,
+            url
           };
           toast.dismiss();
-          toast.success(`${docType} uploaded to IPFS`);
+          toast.success(`${docType} uploaded to Google Drive`);
         }
       }
 
@@ -236,11 +243,11 @@ const EnhancedRegistration: React.FC<EnhancedRegistrationProps> = ({
         status: 'pending',
         is_verified: false,
         email_verified: false,
-        // Document hashes
-        aadhar_card_hash: formData.documents.aadharCard?.ipfsHash,
-        pan_card_hash: formData.documents.panCard?.ipfsHash,
-        ngo_certificate_hash: formData.documents.ngoCertificate?.ipfsHash,
-        company_paper_hash: formData.documents.companyPaper?.ipfsHash,
+        // Document file IDs from Google Drive
+        aadhar_card_file_id: formData.documents.aadharCard?.fileId,
+        pan_card_file_id: formData.documents.panCard?.fileId,
+        ngo_certificate_file_id: formData.documents.ngoCertificate?.fileId,
+        company_paper_file_id: formData.documents.companyPaper?.fileId,
         verification_token: generateVerificationToken(),
         created_at: new Date().toISOString()
       };
@@ -260,25 +267,26 @@ const EnhancedRegistration: React.FC<EnhancedRegistrationProps> = ({
           (formData.subRole === 'ngo' ? 'NGO_CREATOR' : 'PROJECT_CREATOR') : 
           'BACKER';
 
-        // Create IPFS hash of all document hashes for blockchain
+        // Create metadata for blockchain registration
         const blockchainMetadata = {
-          aadharHash: formData.documents.aadharCard?.ipfsHash,
-          panHash: formData.documents.panCard?.ipfsHash,
-          ngoHash: formData.documents.ngoCertificate?.ipfsHash,
-          companyHash: formData.documents.companyPaper?.ipfsHash,
+          aadharFileId: formData.documents.aadharCard?.fileId,
+          panFileId: formData.documents.panCard?.fileId,
+          ngoFileId: formData.documents.ngoCertificate?.fileId,
+          companyFileId: formData.documents.companyPaper?.fileId,
           userType: formData.role,
           subRole: formData.subRole
         };
 
-        const metadataResult = await ipfsService.uploadJSON(blockchainMetadata, {
-          name: `user_verification_${walletAddress}`,
-          type: 'user_verification'
+        // Upload metadata to Google Drive for blockchain reference
+        const metadataResult = await googleDriveService.uploadJSON(blockchainMetadata, 
+          `user_verification_${walletAddress}.json`, {
+          description: 'User verification metadata for blockchain registration'
         });
 
-        if (metadataResult.success && metadataResult.ipfsHash) {
+        if (metadataResult.success && metadataResult.fileId) {
           await advancedBlockchainService.registerUser({
             userType: userType as 'PROJECT_CREATOR' | 'NGO_CREATOR' | 'BACKER',
-            ipfsHash: metadataResult.ipfsHash
+            ipfsHash: metadataResult.fileId // Using file ID as reference
           });
 
           toast.success('Registration complete! User registered on blockchain.');
@@ -290,8 +298,31 @@ const EnhancedRegistration: React.FC<EnhancedRegistrationProps> = ({
         toast.success('Registration complete! (Blockchain registration pending)');
       }
 
-      // TODO: Send verification email
-      toast.success('Registration successful! Please check your email for verification.');
+      // Send verification email (EmailJS) or fallback to queued outbound email
+      try {
+        const verificationLink = `${window.location.origin}/verify-email?token=${userData.verification_token}`;
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); // 48 hours
+
+        const verificationResult = await emailService.sendVerificationEmail({
+          userName: formData.name,
+          userEmail: formData.email,
+          verificationLink,
+          verificationToken: userData.verification_token,
+          expiresAt
+        });
+
+        if (verificationResult.success) {
+          toast.success('Registration successful! Verification email sent.');
+        } else {
+          // Fallback: queue outbound email in integrations
+          await sendEmailNotification(formData.email, 'Verify your ProjectForge account', `Please verify your email by visiting: ${verificationLink}`);
+          toast.success('Registration successful! Verification email queued.');
+        }
+      } catch (emailErr) {
+        console.error('Verification email error', emailErr);
+        // Still continue — verification can be retried by admin or user
+        toast.success('Registration successful! Please check your email for verification.');
+      }
       
       setCurrentStep('complete');
       setTimeout(() => {
@@ -364,10 +395,10 @@ const EnhancedRegistration: React.FC<EnhancedRegistrationProps> = ({
               <p className="text-xs text-gray-500">
                 {(doc.file.size / 1024 / 1024).toFixed(2)} MB
               </p>
-              {doc.uploaded && doc.ipfsHash && (
+              {doc.uploaded && doc.fileId && (
                 <div className="flex items-center space-x-1 mt-1">
                   <CheckCircleIcon className="w-4 h-4 text-green-500" />
-                  <span className="text-xs text-green-600">Uploaded to IPFS</span>
+                  <span className="text-xs text-green-600">Uploaded to Google Drive</span>
                 </div>
               )}
             </div>

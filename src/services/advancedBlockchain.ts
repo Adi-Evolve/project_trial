@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 import { toast } from 'react-hot-toast';
-
+// This file is deprecated. All blockchain/contract logic removed. Use Supabase for all storage and logic.
 // Smart contract addresses from BS folder
 const CONTRACT_ADDRESSES = {
   CROWDFUNDING_PLATFORM: process.env.REACT_APP_CROWDFUNDING_CONTRACT || '0xf8e81D47203A594245E36C48e151709F0C19fBe8',

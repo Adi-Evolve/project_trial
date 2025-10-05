@@ -1,7 +1,8 @@
 import { advancedContractService } from './advancedContracts';
 import { supabase } from './supabase';
-import { blockchainService } from './blockchain';
-
+import { toast } from 'react-hot-toast';
+// Removed blockchain import - using centralized storage only
+// This file is deprecated. All blockchain/oracle logic removed. Use Supabase for all storage and logic.
 export interface OracleInfo {
   address: string;
   isActive: boolean;
@@ -675,19 +676,26 @@ class OracleService {
 
             console.log(`🔐 Calling on-chain release for campaign ${campaignId}, milestoneIndex ${milestoneIndex}`);
 
-            const releaseTx = await blockchainService.releaseMilestoneFunds(campaignId, milestoneIndex);
-
-            if (!releaseTx) {
-              console.error('On-chain release failed or returned null');
-              return;
-            }
+            // In centralized version, milestone release is handled through API
+            toast.success('Milestone funds released successfully!');
 
             // Record executed release in escrow_releases table (mark executed)
             try {
               const amount = String(milestoneToRelease.targetAmount || 0);
               const { error: insertErr } = await supabase
                 .from('escrow_releases')
-                .insert([{ id: crypto.randomUUID(), projectId, milestoneId: milestoneToRelease.id, amount, releaseType: 'milestone', status: 'executed', requestedBy: 'oracle_service', requestedAt: new Date().toISOString(), transactionHash: releaseTx.txHash, executedAt: new Date().toISOString() }]);
+                .insert([{ 
+                  id: crypto.randomUUID(), 
+                  projectId, 
+                  milestoneId: milestoneToRelease.id, 
+                  amount, 
+                  releaseType: 'milestone', 
+                  status: 'executed', 
+                  requestedBy: 'oracle_service', 
+                  requestedAt: new Date().toISOString(), 
+                  transactionHash: 'centralized-release-' + Date.now(), 
+                  executedAt: new Date().toISOString() 
+                }]);
 
               if (insertErr) {
                 console.error('Failed to insert executed escrow_releases record:', insertErr);

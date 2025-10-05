@@ -30,6 +30,7 @@
     "ethers": "^6.15.0",
     "framer-motion": "^12.23.12",
     "gantt-task-react": "^0.3.9",
+    "google-auth-library": "^10.4.0",
     "lucide-react": "^0.544.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
@@ -48,8 +49,8 @@
   },
   "scripts": {
     "start": "react-scripts start",
-  "build": "react-scripts build",
-  "build:relaxed": "node scripts/build-relaxed.js",
+    "build": "react-scripts build",
+    "build:relaxed": "node scripts/build-relaxed.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

@@ -16,7 +16,7 @@ import { supabase } from '../../services/supabase';
 import { escrowService } from '../../services/escrowService';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
-
+// Deprecated: All funding logic removed. Use centralized Supabase logic only.
 interface DonationWidgetProps {
   projectId: string;
   projectTitle: string;

@@ -29,6 +29,7 @@ import {
   ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon, StarIcon as StarSolidIcon } from '@heroicons/react/24/solid';
+import { useAuth } from '../context/AuthContext';
 
 const ProjectDetailsPage: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
@@ -38,6 +39,7 @@ const ProjectDetailsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
   const [isStarred, setIsStarred] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -60,6 +62,7 @@ const ProjectDetailsPage: React.FC = () => {
         }
 
         setProject(data);
+        // ownership will be computed in separate effect when auth and project are available
       } catch (error) {
         console.error(error);
         navigate('/');
@@ -70,6 +73,36 @@ const ProjectDetailsPage: React.FC = () => {
     
     loadProject();
   }, [projectId, navigate]);
+
+  const { user } = useAuth();
+
+  // Compute ownership when project or auth user changes
+  useEffect(() => {
+    if (!project) {
+      setIsOwner(false);
+      return;
+    }
+
+    // If auth user has a UUID (id) compare to creatorId
+    const authId = (user && (user.id || user.username || user.walletAddress)) || null;
+
+    let owner = false;
+    try {
+      if (user && user.id && project.creatorId) {
+        owner = String(project.creatorId) === String(user.id);
+      }
+
+      // Also allow matching by wallet address (creatorAddress)
+      if (!owner && user && user.walletAddress && (project as any).creatorAddress) {
+        owner = String((project as any).creatorAddress).toLowerCase() === String(user.walletAddress).toLowerCase();
+      }
+
+      setIsOwner(owner);
+    } catch (e) {
+      console.warn('Failed to compute ownership', e);
+      setIsOwner(false);
+    }
+  }, [project, user]);
 
   // Handle funding success message
   useEffect(() => {
@@ -229,7 +262,13 @@ const ProjectDetailsPage: React.FC = () => {
                   <p className="font-semibold text-lg">{project.creatorName || 'Anonymous Creator'}</p>
                   <p className="text-white/80 text-sm">Project Creator</p>
                 </div>
-                <CheckBadgeIcon className="w-6 h-6 text-white" />
+                {isOwner ? (
+                  <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full bg-white/20 text-white text-sm">
+                    <CheckBadgeIcon className="w-4 h-4 mr-1" /> Owner
+                  </span>
+                ) : (
+                  <CheckBadgeIcon className="w-6 h-6 text-white" />
+                )}
               </div>
               
               <h1 className="text-5xl font-bold mb-4 leading-tight">{project.title}</h1>
@@ -461,7 +500,7 @@ const ProjectDetailsPage: React.FC = () => {
                   
                   <EscrowManagement 
                     projectId={project.id}
-                    isOwner={true} // TODO: Check if current user is the project owner
+                    isOwner={isOwner}
                   />
                 </div>
               )}

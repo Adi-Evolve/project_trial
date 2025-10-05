@@ -558,61 +558,6 @@ const CommunityPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div className="bg-secondary-800/30 backdrop-blur-xl rounded-xl p-6 border border-secondary-700/50">
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-blue-500/20 rounded-lg">
-                <UsersIcon className="w-6 h-6 text-blue-400" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-white">12.4K</div>
-                <div className="text-sm text-gray-400">Members</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-secondary-800/30 backdrop-blur-xl rounded-xl p-6 border border-secondary-700/50">
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-green-500/20 rounded-lg">
-                <ChatBubbleLeftRightIcon className="w-6 h-6 text-green-400" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-white">3.2K</div>
-                <div className="text-sm text-gray-400">Discussions</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-secondary-800/30 backdrop-blur-xl rounded-xl p-6 border border-secondary-700/50">
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-purple-500/20 rounded-lg">
-                <AcademicCapIcon className="w-6 h-6 text-purple-400" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-white">856</div>
-                <div className="text-sm text-gray-400">Mentors</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-secondary-800/30 backdrop-blur-xl rounded-xl p-6 border border-secondary-700/50">
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-orange-500/20 rounded-lg">
-                <RocketLaunchIcon className="w-6 h-6 text-orange-400" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-white">127</div>
-                <div className="text-sm text-gray-400">Success Stories</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        </div>
-      </div>
-
       {/* Navigation Tabs */}
       <div className="w-full px-4 sm:px-6 lg:px-8 pb-6">
         <div className="max-w-7xl mx-auto">

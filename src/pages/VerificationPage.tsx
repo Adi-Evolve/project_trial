@@ -21,7 +21,7 @@ const VerificationPage: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState<'user' | 'admin'>('user');
   
   // Check if user is admin (you'd implement this based on your auth system)
-  const isAdmin = user?.email?.includes('admin') || user?.role === 'fund_raiser'; // Temp check for demo
+  const isAdmin = user?.email?.includes('admin') || false; // Simplified check for demo
 
   if (!user) {
     return (
@@ -98,7 +98,7 @@ const VerificationPage: React.FC = () => {
           {/* User Verification Form */}
           {(!isAdmin || activeTab === 'user') && (
             <UserVerificationForm
-              userId={user.walletAddress}
+              userId={user.walletAddress || user.id || ''}
               userEmail={user.email}
               userName={user.name}
               onVerificationSubmitted={(success, message) => {
@@ -114,7 +114,7 @@ const VerificationPage: React.FC = () => {
           {/* Admin Dashboard */}
           {isAdmin && activeTab === 'admin' && (
             <AdminVerificationDashboard
-              adminId={user.walletAddress}
+              adminId={user.walletAddress || user.id || ''}
             />
           )}
         </div>
@@ -150,9 +150,9 @@ const VerificationPage: React.FC = () => {
                 <div>
                   <h4 className="font-medium mb-2">User Types</h4>
                   <ul className="text-sm text-gray-600 space-y-1">
-                    <li>• <strong>Backer:</strong> Fund projects</li>
-                    <li>• <strong>Creator:</strong> Launch projects</li>
-                    <li>• <strong>NGO:</strong> Create NGO campaigns</li>
+                    <li>• <strong>Collaborator:</strong> Join and contribute to projects</li>
+                    <li>• <strong>Creator:</strong> Launch and manage projects</li>
+                    <li>• <strong>Organization:</strong> Create organizational projects</li>
                   </ul>
                 </div>
               </div>

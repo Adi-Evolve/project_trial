@@ -1,8 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { blockchainService } from '../../services/blockchain';
+ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 
+// blockchain service removed for centralized version
+// Mock blockchain service for demo purposes
+const mockBlockchainService = {
+  getCurrentAccount: async () => 'demo-account-0x123',
+  getETHPrice: async () => 2000,
+  connectWallet: async () => 'demo-connected-0x456',
+  switchToCorrectNetwork: async () => true,
+  registerOracleNode: async (...args: any[]) => ({ success: true, nodeId: 'demo-oracle-' + Date.now() }),
+  createCampaign: async (...args: any[]) => ({ success: true, campaignId: Date.now() }),
+  submitMilestone: async (...args: any[]) => ({ success: true, milestoneId: 'demo-milestone-' + Date.now() }),
+  verifyMilestoneDemo: async (...args: any[]) => ({ success: true, verified: true })
+};
+
 interface DemoWorkflowProps {}
+
 
 const DemoWorkflow: React.FC<DemoWorkflowProps> = () => {
   const [connectedAccount, setConnectedAccount] = useState<string | null>(null);
@@ -15,17 +28,35 @@ const DemoWorkflow: React.FC<DemoWorkflowProps> = () => {
   });
   const [loading, setLoading] = useState(false);
 
+  // Milestone history for flowchart/timeline
+  const [milestoneHistory, setMilestoneHistory] = useState<{
+    type: 'submitted' | 'approved' | 'rejected';
+    label: string;
+    timestamp: number;
+  }[]>([]);
+
+  // Demo milestone list (static for demo, replace with dynamic for real projects)
+  const milestoneList = [
+    'Project Setup & Planning',
+    'MVP Development',
+    'Testing & Deployment',
+    'Launch & Marketing'
+  ];
+
+  // Count completed milestones (approved events)
+  const completedMilestones = milestoneHistory.filter(e => e.type === 'approved').length;
+
   useEffect(() => {
     loadInitialData();
   }, []);
 
   const loadInitialData = async () => {
     try {
-      const account = await blockchainService.getCurrentAccount();
+      const account = await mockBlockchainService.getCurrentAccount();
       setConnectedAccount(account);
 
       // Get ETH price to show Chainlink is working
-      const price = await blockchainService.getETHPrice();
+      const price = await mockBlockchainService.getETHPrice();
       setDemoData(prev => ({ ...prev, ethPrice: price }));
     } catch (error) {
       console.error('Failed to load initial data:', error);
@@ -35,10 +66,10 @@ const DemoWorkflow: React.FC<DemoWorkflowProps> = () => {
   const connectWallet = async () => {
     setLoading(true);
     try {
-      const account = await blockchainService.connectWallet();
+      const account = await mockBlockchainService.connectWallet();
       setConnectedAccount(account);
       
-      const switched = await blockchainService.switchToCorrectNetwork(11155111);
+      const switched = await mockBlockchainService.switchToCorrectNetwork();
       if (switched) {
         toast.success('Connected to Sepolia testnet');
         setCurrentStep(2);
@@ -59,7 +90,7 @@ const DemoWorkflow: React.FC<DemoWorkflowProps> = () => {
     setLoading(true);
     try {
       // For demo, we'll use a smaller stake amount (0.1 ETH instead of 1 ETH)
-      const result = await blockchainService.registerOracleNode(
+      const result = await mockBlockchainService.registerOracleNode(
         'https://demo-oracle.projectforge.io',
         '0.1'
       );
@@ -94,7 +125,7 @@ const DemoWorkflow: React.FC<DemoWorkflowProps> = () => {
 
     setLoading(true);
     try {
-      const result = await blockchainService.createCampaign(
+      const result = await mockBlockchainService.createCampaign(
         'ProjectForge Demo Campaign',
         'A demonstration of milestone-based crowdfunding with oracle verification',
         '0.5', // 0.5 ETH goal
@@ -114,6 +145,7 @@ const DemoWorkflow: React.FC<DemoWorkflowProps> = () => {
     }
   };
 
+
   const submitMilestone = async () => {
     if (!demoData.campaignId) {
       toast.error('Please create a campaign first');
@@ -123,7 +155,7 @@ const DemoWorkflow: React.FC<DemoWorkflowProps> = () => {
     setLoading(true);
     try {
       // Submit first milestone (index 0)
-      const result = await blockchainService.submitMilestone(
+      const result = await mockBlockchainService.submitMilestone(
         demoData.campaignId,
         0, // First milestone
         'QmDemoHash123456789' // Demo IPFS hash
@@ -132,6 +164,10 @@ const DemoWorkflow: React.FC<DemoWorkflowProps> = () => {
       if (result) {
         toast.success('Milestone submitted for verification!');
         setDemoData(prev => ({ ...prev, milestoneSubmitted: true }));
+        setMilestoneHistory(prev => [
+          ...prev,
+          { type: 'submitted', label: 'Milestone Submitted', timestamp: Date.now() }
+        ]);
         setCurrentStep(5);
       }
     } catch (error) {
@@ -141,6 +177,7 @@ const DemoWorkflow: React.FC<DemoWorkflowProps> = () => {
     }
   };
 
+
   const verifyMilestone = async () => {
     if (!demoData.campaignId) {
       toast.error('No campaign available');
@@ -149,14 +186,22 @@ const DemoWorkflow: React.FC<DemoWorkflowProps> = () => {
 
     setLoading(true);
     try {
-      const result = await blockchainService.verifyMilestoneDemo(demoData.campaignId, 0);
+      const result = await mockBlockchainService.verifyMilestoneDemo(demoData.campaignId, 0);
       if (result) {
+        setMilestoneHistory(prev => [
+          ...prev,
+          { type: 'approved', label: 'Milestone Approved', timestamp: Date.now() }
+        ]);
         setCurrentStep(6);
       }
     } catch (error) {
       console.error('Failed to verify milestone:', error);
       // Continue anyway for demo
       toast.success('🎉 Milestone Verified Successfully! (Demo Mode)');
+      setMilestoneHistory(prev => [
+        ...prev,
+        { type: 'approved', label: 'Milestone Approved', timestamp: Date.now() }
+      ]);
       setCurrentStep(6);
     } finally {
       setLoading(false);
@@ -186,6 +231,50 @@ const DemoWorkflow: React.FC<DemoWorkflowProps> = () => {
           <p className="text-gray-600">
             Complete Oracle & Milestone Verification Demo for Submission
           </p>
+        </div>
+
+        {/* Milestone Progress Bar */}
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Milestone Progress</h3>
+          <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
+            <div
+              className="bg-green-500 h-4 rounded-full transition-all duration-500"
+              style={{ width: `${(completedMilestones / milestoneList.length) * 100}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-gray-600">
+            {milestoneList.map((m, idx) => (
+              <span key={idx} className={idx < completedMilestones ? 'text-green-600 font-bold' : ''}>{m}</span>
+            ))}
+          </div>
+          <div className="text-right text-xs text-gray-500 mt-1">
+            {completedMilestones} of {milestoneList.length} milestones completed
+          </div>
+        </div>
+
+        {/* Milestone History Timeline */}
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Milestone History</h3>
+          {milestoneHistory.length === 0 ? (
+            <div className="text-gray-500 text-sm">No milestone events yet.</div>
+          ) : (
+            <ol className="border-l-2 border-blue-400 ml-4">
+              {milestoneHistory.map((event, idx) => (
+                <li key={idx} className="mb-4 ml-2 flex items-center">
+                  <span className={`w-4 h-4 rounded-full mr-3 flex items-center justify-center
+                    ${event.type === 'submitted' ? 'bg-blue-400' : event.type === 'approved' ? 'bg-green-500' : 'bg-red-500'}
+                    text-white text-xs font-bold`}
+                  >
+                    {event.type === 'submitted' ? 'S' : event.type === 'approved' ? 'A' : 'R'}
+                  </span>
+                  <div>
+                    <div className="font-medium text-gray-700">{event.label}</div>
+                    <div className="text-xs text-gray-400">{new Date(event.timestamp).toLocaleString()}</div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
 
         {/* Chainlink Status */}

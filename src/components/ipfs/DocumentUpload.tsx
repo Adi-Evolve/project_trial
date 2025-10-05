@@ -28,7 +28,7 @@ import {
   FileCheck,
   Shield
 } from 'lucide-react';
-
+// Deprecated: All IPFS logic removed. Use Google Drive or Supabase Storage for uploads.
 interface DocumentUploadProps {
   userId: string;
   campaignId?: string;

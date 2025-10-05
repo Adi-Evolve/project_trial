@@ -19,9 +19,8 @@ import {
 } from '@heroicons/react/24/solid';
 import { toast } from 'react-hot-toast';
 import { supabase } from '../services/supabase';
-import { blockchainService } from '../services/blockchain';
 import { useAuth } from '../context/AuthContext';
-import TestPinataImageUpload from '../components/test/TestPinataImageUpload';
+ 
 
 interface Idea {
   id: string;
@@ -39,11 +38,7 @@ interface Idea {
   currency: 'ETH' | 'USD';
   type: 'exclusive' | 'license' | 'collaboration';
   visibility: 'public' | 'premium' | 'private';
-  blockchain: {
-    verified: boolean;
-    txHash: string;
-    ipfsHash: string;
-  };
+  verified: boolean;
   metrics: {
     views: number;
     likes: number;
@@ -143,11 +138,7 @@ const IdeasPage: React.FC = () => {
         currency: (idea.currency as 'ETH' | 'USD') || 'USD',
         type: (idea.type as 'exclusive' | 'license' | 'collaboration') || 'collaboration',
         visibility: (idea.visibility as 'public' | 'premium' | 'private') || 'public',
-        blockchain: {
-          verified: !!idea.tx_hash,
-          txHash: idea.tx_hash || '',
-          ipfsHash: idea.metadata_hash || ''
-        },
+        verified: !!idea.verified,
         metrics: {
           views: idea.views || 0,
           likes: idea.likes || 0,
@@ -204,7 +195,7 @@ const IdeasPage: React.FC = () => {
         filtered = filtered.filter(idea => idea.visibility === 'premium');
         break;
       case 'verified':
-        filtered = filtered.filter(idea => idea.blockchain.verified);
+        filtered = filtered.filter(idea => idea.verified);
         break;
       case 'bidding':
         filtered = filtered.filter(idea => idea.bidding?.enabled);
@@ -281,41 +272,7 @@ const IdeasPage: React.FC = () => {
       if (createError) throw createError;
 
 
-      // Register idea on blockchain for ownership verification
-      try {
-        const blockchainResult = await blockchainService.registerIdea({
-          id: createdIdea.id,
-          title: createdIdea.title,
-          description: createdIdea.description,
-          author: user.id || 'anonymous',
-          timestamp: new Date().toISOString(),
-          category: createdIdea.category,
-          tags: createdIdea.tags
-        });
 
-        // Update the idea with blockchain transaction details
-        if (blockchainResult) {
-          const { error: updateError } = await supabase
-            .from('ideas')
-            .update({
-              tx_hash: blockchainResult.txHash,
-              block_number: blockchainResult.blockNumber,
-              metadata_hash: blockchainResult.txHash // Using txHash as metadata reference
-            })
-            .eq('id', createdIdea.id);
-
-          if (updateError) {
-            console.error('Failed to update idea with blockchain data:', updateError);
-          }
-
-          toast.success('Idea submitted and registered on blockchain!');
-        } else {
-          toast.success('Idea submitted! (Blockchain registration pending)');
-        }
-      } catch (blockchainError) {
-        console.error('Blockchain registration failed:', blockchainError);
-        toast.success('Idea submitted! (Blockchain registration pending)');
-      }
 
 
       // Reset form and close modal
@@ -390,7 +347,7 @@ const IdeasPage: React.FC = () => {
                 <div>
                   <h1 className="text-4xl font-bold text-white">Ideas Marketplace</h1>
                   <p className="text-gray-400 text-lg">
-                    Discover, buy, and sell innovative ideas secured by blockchain
+                    Discover, buy, and sell innovative ideas powered by the community
                   </p>
                 </div>
               </div>
@@ -415,7 +372,7 @@ const IdeasPage: React.FC = () => {
       {/* Pinata IPFS Test Component - Temporary */}
       <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
         <div className="max-w-7xl mx-auto">
-          <TestPinataImageUpload />
+          
         </div>
       </div>
 
@@ -571,9 +528,9 @@ const IdeasPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center space-x-2">
-                      {idea.blockchain.verified && (
+                      {idea.verified && (
                         <div className="p-1 bg-green-500/20 rounded-lg">
-                          <LockClosedIcon className="w-4 h-4 text-green-400" />
+                          <ShieldCheckIcon className="w-4 h-4 text-green-400" />
                         </div>
                       )}
                       {idea.visibility === 'premium' && (

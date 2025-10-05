@@ -56,88 +56,26 @@ const BookmarksPage: React.FC = () => {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
 
-  // Mock data
+  // Fetch bookmarks and categories from Supabase
   useEffect(() => {
-    const mockBookmarks: BookmarkedItem[] = [
-      {
-        id: '1',
-        title: 'AI-Powered Task Manager',
-        description: 'Intelligent task management system with ML-based priority suggestions and automated scheduling.',
-        type: 'project',
-        author: 'Sarah Chen',
-        authorAvatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b563?w=150',
-        imageUrl: 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=400',
-        tags: ['AI', 'Productivity', 'Machine Learning'],
-        bookmarkedAt: '2024-01-15T10:30:00Z',
-        category: 'productivity',
-        stats: { likes: 342, views: 1205, comments: 89 }
-      },
-      {
-        id: '2',
-        title: 'Sustainable Urban Farming',
-        description: 'Revolutionary approach to vertical farming in urban environments using IoT sensors.',
-        type: 'idea',
-        author: 'Marcus Rodriguez',
-        authorAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
-        imageUrl: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
-        tags: ['Agriculture', 'IoT', 'Sustainability'],
-        bookmarkedAt: '2024-01-14T15:45:00Z',
-        category: 'environment',
-        stats: { likes: 156, views: 678, comments: 34 }
-      },
-      {
-        id: '3',
-        title: 'Dr. Emily Watson',
-        description: 'Blockchain developer and DeFi researcher with 5+ years experience in smart contract development.',
-        type: 'user',
-        author: 'Dr. Emily Watson',
-        authorAvatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
-        tags: ['Blockchain', 'DeFi', 'Smart Contracts'],
-        bookmarkedAt: '2024-01-12T09:20:00Z',
-        category: 'people',
-        stats: { likes: 89, views: 234, comments: 12 }
-      },
-      {
-        id: '4',
-        title: 'Quantum Computing Simulator',
-        description: 'Open-source quantum computing simulator for educational purposes and research.',
-        type: 'project',
-        author: 'Alex Thompson',
-        authorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-        imageUrl: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400',
-        tags: ['Quantum Computing', 'Education', 'Research'],
-        bookmarkedAt: '2024-01-10T14:15:00Z',
-        category: 'education',
-        stats: { likes: 278, views: 892, comments: 56 }
-      },
-      {
-        id: '5',
-        title: 'Mental Health Chatbot',
-        description: 'AI-powered mental health support chatbot with personalized therapy suggestions.',
-        type: 'idea',
-        author: 'Lisa Park',
-        authorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-        imageUrl: 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400',
-        tags: ['Mental Health', 'AI', 'Healthcare'],
-        bookmarkedAt: '2024-01-08T11:30:00Z',
-        category: 'health',
-        stats: { likes: 445, views: 1356, comments: 78 }
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Replace with your Supabase fetching logic
+        // Example:
+        // const { data: bookmarksData } = await supabase.from('bookmarks').select('*');
+        // const { data: categoriesData } = await supabase.from('bookmark_categories').select('*');
+        // setBookmarks(bookmarksData || []);
+        // setCategories(categoriesData || []);
+        setBookmarks([]); // Empty for now, implement real fetch
+        setCategories([]); // Empty for now, implement real fetch
+      } catch (error) {
+        setBookmarks([]);
+        setCategories([]);
       }
-    ];
-
-    const mockCategories: BookmarkCategory[] = [
-      { id: 'productivity', name: 'Productivity', count: 8, color: 'blue' },
-      { id: 'environment', name: 'Environment', count: 5, color: 'green' },
-      { id: 'people', name: 'People', count: 12, color: 'purple' },
-      { id: 'education', name: 'Education', count: 6, color: 'yellow' },
-      { id: 'health', name: 'Health', count: 3, color: 'red' }
-    ];
-
-    setTimeout(() => {
-      setBookmarks(mockBookmarks);
-      setCategories(mockCategories);
       setLoading(false);
-    }, 1000);
+    };
+    fetchData();
   }, []);
 
   const filteredBookmarks = bookmarks.filter(bookmark => {

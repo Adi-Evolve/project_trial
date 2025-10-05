@@ -19,6 +19,7 @@ import {
   XMarkIcon
 } from '@heroicons/react/24/outline';
 import { Link, useSearchParams } from 'react-router-dom';
+import supabase, { supabase as supabaseClient, TABLES } from '../services/supabase';
 
 interface SearchResult {
   id: string;
@@ -57,117 +58,134 @@ const SearchResultsPage: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [dateFilter, setDateFilter] = useState('all');
 
-  // Mock data
+  // Fetch search results from Supabase
   useEffect(() => {
-    const mockResults: SearchResult[] = [
-      {
-        id: '1',
-        type: 'project',
-        title: 'AI-Powered Task Manager',
-        description: 'Intelligent task management system with ML-based priority suggestions and automated scheduling. Features natural language processing for task creation and smart deadline predictions.',
-        image: 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=400',
-        author: {
-          name: 'Sarah Chen',
-          avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b563?w=150',
-          username: 'sarahchen'
-        },
-        tags: ['AI', 'Productivity', 'Machine Learning', 'Task Management'],
-        stats: { likes: 342, views: 1205, comments: 89 },
-        createdAt: '2024-01-15T10:30:00Z',
-        relevanceScore: 0.95,
-        isBookmarked: true
-      },
-      {
-        id: '2',
-        type: 'idea',
-        title: 'Sustainable Urban Farming',
-        description: 'Revolutionary approach to vertical farming in urban environments using IoT sensors for optimal growing conditions. Includes automated watering, lighting, and nutrient delivery systems.',
-        image: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400',
-        author: {
-          name: 'Marcus Rodriguez',
-          avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
-          username: 'marcusr'
-        },
-        tags: ['Agriculture', 'IoT', 'Sustainability', 'Urban Planning'],
-        stats: { likes: 156, views: 678, comments: 34 },
-        createdAt: '2024-01-14T15:45:00Z',
-        relevanceScore: 0.87,
-        isBookmarked: false
-      },
-      {
-        id: '3',
-        type: 'user',
-        title: 'Dr. Emily Watson',
-        description: 'Quantum computing researcher and blockchain developer with 8+ years experience. Specializes in quantum cryptography and secure distributed systems.',
-        image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400',
-        author: {
-          name: 'Dr. Emily Watson',
-          avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
-          username: 'emilywatson'
-        },
-        tags: ['Quantum Computing', 'Blockchain', 'Cryptography', 'Research'],
-        stats: { likes: 89, views: 234, followers: 445 },
-        createdAt: '2024-01-12T09:20:00Z',
-        relevanceScore: 0.82,
-        isFollowing: true
-      },
-      {
-        id: '4',
-        type: 'project',
-        title: 'Quantum Computing Simulator',
-        description: 'Open-source quantum computing simulator for educational purposes and research. Includes visual qubit manipulation and quantum algorithm demonstrations.',
-        image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400',
-        author: {
-          name: 'Alex Thompson',
-          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-          username: 'alexthompson'
-        },
-        tags: ['Quantum Computing', 'Education', 'Simulation', 'Open Source'],
-        stats: { likes: 278, views: 892, comments: 56 },
-        createdAt: '2024-01-10T14:15:00Z',
-        relevanceScore: 0.79,
-        isBookmarked: false
-      },
-      {
-        id: '5',
-        type: 'idea',
-        title: 'Mental Health Chatbot',
-        description: 'AI-powered mental health support chatbot with personalized therapy suggestions and crisis intervention capabilities.',
-        image: 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400',
-        author: {
-          name: 'Lisa Park',
-          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-          username: 'lisapark'
-        },
-        tags: ['Mental Health', 'AI', 'Healthcare', 'Chatbot'],
-        stats: { likes: 445, views: 1356, comments: 78 },
-        createdAt: '2024-01-08T11:30:00Z',
-        relevanceScore: 0.74,
-        isBookmarked: true
-      },
-      {
-        id: '6',
-        type: 'content',
-        title: 'Building Scalable Web Applications',
-        description: 'Comprehensive guide on architecting and building scalable web applications using modern technologies and best practices.',
-        author: {
-          name: 'David Kim',
-          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-          username: 'davidkim'
-        },
-        tags: ['Web Development', 'Architecture', 'Scalability', 'Tutorial'],
-        stats: { likes: 123, views: 567, comments: 23 },
-        createdAt: '2024-01-07T16:20:00Z',
-        relevanceScore: 0.68,
-        isBookmarked: false
-      }
-    ];
+    const q = searchTerm?.trim();
+    if (!q) {
+      // load popular projects as fallback
+      (async () => {
+        try {
+          const { data: projects } = await supabaseClient
+            .from('projects')
+            .select('id,title,summary,cover_image,creator_id,created_at,views,likes')
+            .order('views', { ascending: false })
+            .limit(12);
 
-    setTimeout(() => {
-      setResults(mockResults);
-      setFilteredResults(mockResults);
-      setLoading(false);
-    }, 1000);
+          const mapped = (projects || []).map(p => ({
+            id: p.id,
+            type: 'project' as const,
+            title: p.title,
+            description: p.summary || '',
+            image: p.cover_image || undefined,
+            author: undefined,
+            tags: [],
+            stats: { likes: p.likes || 0, views: p.views || 0 },
+            createdAt: p.created_at,
+            relevanceScore: 0.5
+          })) as SearchResult[];
+          setResults(mapped);
+        } catch (err) {
+          setResults([]);
+        } finally {
+          setLoading(false);
+        }
+      })();
+      return;
+    }
+
+    setLoading(true);
+    (async () => {
+      try {
+        // Search projects
+        const { data: projects } = await supabaseClient
+          .from('projects')
+          .select('id,title,summary,cover_image,creator_id,created_at,views,likes')
+          .ilike('title', `%${q}%`)
+          .limit(50);
+
+        // Search ideas
+        const { data: ideas } = await supabaseClient
+          .from('ideas')
+          .select('id,title,summary,created_at')
+          .ilike('title', `%${q}%`)
+          .limit(50);
+
+        // Search users
+        const { data: users } = await supabaseClient
+          .from('users')
+          .select('id,username,full_name,avatar_url')
+          .or(`username.ilike.%${q}%,full_name.ilike.%${q}%`)
+          .limit(50);
+
+        // Search project updates / content
+        const { data: updates } = await supabaseClient
+          .from('project_updates')
+          .select('id,title,body,project_id,created_at')
+          .ilike('title', `%${q}%`)
+          .limit(50);
+
+  const out: SearchResult[] = [];
+
+        (projects || []).forEach(p => out.push({
+          id: p.id,
+          type: 'project',
+          title: p.title,
+          description: p.summary || '',
+          image: p.cover_image || undefined,
+          author: undefined,
+          tags: [],
+          stats: { likes: p.likes || 0, views: p.views || 0 },
+          createdAt: p.created_at,
+          relevanceScore: 0.9
+        } as SearchResult));
+
+        (ideas || []).forEach(i => out.push({
+          id: i.id,
+          type: 'idea',
+          title: i.title,
+          description: i.summary || '',
+          tags: [],
+          stats: { likes: 0, views: 0 },
+          createdAt: i.created_at,
+          relevanceScore: 0.7
+        } as SearchResult));
+
+        (users || []).forEach(u => out.push({
+          id: u.id,
+          type: 'user',
+          title: u.full_name || u.username,
+          description: `@${u.username}`,
+          image: u.avatar_url || undefined,
+          author: { name: u.full_name || u.username, avatar: u.avatar_url || '', username: u.username },
+          tags: [],
+          stats: { likes: 0, views: 0 },
+          createdAt: new Date().toISOString(),
+          relevanceScore: 0.95
+        } as SearchResult));
+
+        (updates || []).forEach(u => out.push({
+          id: u.id,
+          type: 'content',
+          title: u.title,
+          description: (u.body || '').slice(0, 200),
+          tags: [],
+          stats: { likes: 0, views: 0 },
+          createdAt: u.created_at,
+          relevanceScore: 0.6
+        } as SearchResult));
+
+        // Basic dedupe by id+type
+        const dedupedMap = new Map();
+        out.forEach(r => dedupedMap.set(`${r.type}:${r.id}`, r));
+        const final = Array.from(dedupedMap.values()).sort((a, b) => b.relevanceScore - a.relevanceScore);
+        setResults(final);
+      } catch (err) {
+        console.error('Search error', err);
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [searchTerm]);
 
   useEffect(() => {

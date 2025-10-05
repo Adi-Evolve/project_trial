@@ -17,7 +17,6 @@ import LeaderboardPage from './pages/LeaderboardPage';
 import FindCollaboratorsPage from './pages/FindCollaboratorsPage';
 import ProjectManagementPage from './pages/ProjectManagementPage';
 import ProjectDetailsPage from './pages/ProjectDetailsPage';
-import ProjectFundingPage from './pages/ProjectFundingPage';
 import CreateProjectPage from './pages/CreateProjectPage';
 import EditProjectPage from './pages/EditProjectPage';
 import UserProfilePage from './pages/UserProfilePage';
@@ -32,11 +31,7 @@ import SearchResultsPage from './pages/SearchResultsPage';
 import EmailServiceDemo from './components/testing/EmailServiceDemo';
 import TestFundTransferPage from './pages/TestFundTransferPage';
 import { TestEscrowPage } from './pages/TestEscrowPage';
-import PinataTestPage from './pages/PinataTestPage';
-import ContractTest from './components/test/ContractTest';
-import DemoWorkflow from './components/demo/DemoWorkflow';
-import FullOracleSystem from './components/oracle/FullOracleSystem';
-import { AuthFlow } from './components/auth/AuthFlow';
+import AuthFlow from './components/auth/AuthFlow';
 import WelcomeBack from './components/auth/WelcomeBack';
 import LandingPage from './components/landing/LandingPage';
 import FloatingChatButton from './components/chat/FloatingChatButton';
@@ -77,10 +72,7 @@ const AppContent: React.FC = () => {
   // Show authentication flow if user clicked sign in/login
   if (showAuthFlow && !isAuthenticated) {
     return (
-      <AuthFlow 
-        defaultMode={authMode}
-        onBack={() => setShowAuthFlow(false)}
-      />
+      <AuthFlow />
     );
   }
 
@@ -177,11 +169,7 @@ const AppContent: React.FC = () => {
             <ProjectDetailsPage />
           </Layout>
         } />
-        <Route path="/projects/:id/fund" element={
-          <Layout>
-            <ProjectFundingPage />
-          </Layout>
-        } />
+        {/* Funding page deprecated and removed */}
         <Route path="/create-project" element={
           <Layout>
             <CreateProjectPage />
@@ -252,26 +240,7 @@ const AppContent: React.FC = () => {
             <TestEscrowPage />
           </Layout>
         } />
-        <Route path="/test-pinata" element={
-          <Layout>
-            <PinataTestPage />
-          </Layout>
-        } />
-        <Route path="/test-contracts" element={
-          <Layout>
-            <ContractTest />
-          </Layout>
-        } />
-        <Route path="/demo" element={
-          <Layout>
-            <DemoWorkflow />
-          </Layout>
-        } />
-        <Route path="/oracle" element={
-          <Layout>
-            <FullOracleSystem />
-          </Layout>
-        } />
+        {/* Deprecated test/demo/oracle routes removed */}
         
         {/* Redirects */}
         <Route path="/discover" element={<Navigate to="/projects" replace />} />

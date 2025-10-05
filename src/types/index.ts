@@ -1,62 +1,71 @@
 export interface User {
   id: string;
+  google_id?: string;
   email: string;
-  username: string;
-  fullName: string;
-  avatar?: string;
-  avatarUrl?: string;
+  email_verified: boolean;
+  username?: string;
+  full_name?: string;
   bio?: string;
+  avatar_url?: string;
+  cover_photo?: string;
+  website_url?: string;
+  github_url?: string;
+  twitter_url?: string;
+  linkedin_url?: string;
   location?: string;
-  website?: string;
+  phone?: string;
+  company?: string;
+  role?: string;
   skills: string[];
-  fieldsOfInterest: string[];
-  reputation: number;
-  verified: boolean;
-  githubProfile?: string;
-  linkedinProfile?: string;
-  portfolioUrl?: string;
-  createdAt: string;
-  updatedAt: string;
+  experience_level: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+  user_type: 'user' | 'admin' | 'reviewer';
+  verification_status: 'pending' | 'approved' | 'rejected';
+  is_verified: boolean;
+  is_active: boolean;
+  is_reviewer: boolean;
+  reputation_score: number;
+  total_projects: number;
+  views: number;
+  likes: number;
+  followers_count: number;
+  following_count: number;
+  privacy_settings: Record<string, any>;
+  notification_settings: Record<string, any>;
+  settings: Record<string, any>;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Project {
   id: string;
+  creator_id: string;
   title: string;
   description: string;
-  shortDescription: string;
-  images: string[];
-  videos?: string[];
-  category: ProjectCategory;
+  summary?: string;
+  category: string;
   tags: string[];
-  status: ProjectStatus;
-  visibility: 'public' | 'private' | 'unlisted';
-  targetAmount?: number;
-  currentAmount: number;
-  currency: 'USD' | 'ETH' | 'MATIC';
-  startDate: string;
-  endDate?: string;
-  requirements: string[];
-  skillsNeeded: string[];
-  teamSize: number;
-  currentTeamSize: number;
-  location?: string;
-  remote: boolean;
-  owner: User;
-  collaborators: User[];
-  upvotes: number;
-  downvotes: number;
+  deadline?: string;
+  status: 'draft' | 'pending' | 'active' | 'completed' | 'cancelled';
+  approval_status: 'pending' | 'approved' | 'rejected';
+  cover_image?: string; // ImgBB URL
+  image_urls?: string[]; // Multiple ImgBB URLs
+  video_url?: string;
+  website_url?: string;
+  github_url?: string;
+  roadmap: any[];
+  team_members: any[];
+  requirements?: string;
+  featured: boolean;
   views: number;
-  bookmarks: number;
-  comments: Comment[];
-  updates: ProjectUpdate[];
-  milestones: Milestone[];
-  blockchain: {
-    txHash?: string;
-    blockNumber?: number;
-    contractAddress?: string;
-  };
-  createdAt: string;
-  updatedAt: string;
+  likes: number;
+  comment_count: number;
+  share_count: number;
+  bookmark_count: number;
+  admin_notes?: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Idea {
@@ -74,12 +83,7 @@ export interface Idea {
   collaborationOpen: boolean;
   skillsNeeded: string[];
   potentialReward?: number;
-  blockchain: {
-    txHash: string;
-    blockNumber: number;
-    timestamp: string;
-    ownershipProof: string;
-  };
+  // Blockchain fields removed. All idea data is centralized.
   createdAt: string;
   updatedAt: string;
 }
@@ -104,7 +108,7 @@ export interface ProjectUpdate {
   images?: string[];
   videos?: string[];
   author: User;
-  type: 'progress' | 'milestone' | 'announcement' | 'funding';
+  type: 'progress' | 'milestone' | 'announcement';
   createdAt: string;
 }
 
@@ -154,7 +158,6 @@ export type ProjectCategory =
   | 'mobile'
   | 'web'
   | 'ai'
-  | 'blockchain'
   | 'iot'
   | 'gaming'
   | 'fintech'
@@ -173,11 +176,9 @@ export type IdeaCategory =
 
 export type ProjectStatus = 
   | 'draft'
-  | 'seeking_team'
-  | 'seeking_funding'
-  | 'in_progress'
+  | 'pending'
+  | 'active'
   | 'completed'
-  | 'paused'
   | 'cancelled';
 
 export type NotificationType = 
@@ -186,7 +187,6 @@ export type NotificationType =
   | 'collaboration_request'
   | 'vote_received'
   | 'milestone_completed'
-  | 'funding_received'
   | 'system_announcement';
 
 export type SkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
@@ -224,15 +224,6 @@ export interface PaginatedResponse<T> {
   hasMore: boolean;
 }
 
-export interface BlockchainRecord {
-  id: string;
-  type: 'user_verification' | 'project_creation' | 'idea_registration' | 'vote_cast';
-  data: any;
-  txHash: string;
-  blockNumber: number;
-  timestamp: string;
-  verified: boolean;
-}
 
 export interface AuthState {
   user: User | null;

@@ -14,7 +14,7 @@ export const PROJECT_CATEGORIES = [
   { value: 'mobile', label: 'Mobile Apps', icon: '📱' },
   { value: 'web', label: 'Web Development', icon: '🌐' },
   { value: 'ai', label: 'Artificial Intelligence', icon: '🤖' },
-  { value: 'blockchain', label: 'Blockchain', icon: '⛓️' },
+  // Blockchain category removed
   { value: 'iot', label: 'Internet of Things', icon: '📡' },
   { value: 'gaming', label: 'Gaming', icon: '🎮' },
   { value: 'fintech', label: 'FinTech', icon: '💳' },
@@ -90,13 +90,7 @@ export const SKILL_CATEGORIES = [
       'NumPy', 'Scikit-learn', 'Jupyter', 'Data Visualization', 'NLP', 'Computer Vision'
     ]
   },
-  {
-    category: 'Blockchain & Web3',
-    skills: [
-      'Solidity', 'Web3.js', 'Ethers.js', 'Smart Contracts', 'DeFi', 'NFTs',
-      'Ethereum', 'Polygon', 'Binance Smart Chain', 'IPFS', 'MetaMask'
-    ]
-  },
+  // Blockchain & Web3 skills removed
   {
     category: 'Project Management',
     skills: [
@@ -124,7 +118,7 @@ export const SKILL_CATEGORIES = [
 export const PROJECT_STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft', color: 'gray', icon: '📝' },
   { value: 'seeking_team', label: 'Seeking Team', color: 'blue', icon: '👥' },
-  { value: 'seeking_funding', label: 'Seeking Funding', color: 'yellow', icon: '💰' },
+  // Seeking Funding status removed
   { value: 'in_progress', label: 'In Progress', color: 'orange', icon: '🚧' },
   { value: 'completed', label: 'Completed', color: 'green', icon: '✅' },
   { value: 'paused', label: 'Paused', color: 'purple', icon: '⏸️' },
@@ -149,8 +143,7 @@ export const TIME_RANGE_OPTIONS = [
 
 export const CURRENCIES = [
   { value: 'USD', label: 'US Dollar', symbol: '$' },
-  { value: 'ETH', label: 'Ethereum', symbol: 'Ξ' },
-  { value: 'MATIC', label: 'Polygon', symbol: 'MATIC' },
+  // Only USD supported
 ] as const;
 
 export const NOTIFICATION_TYPES = [
@@ -159,35 +152,18 @@ export const NOTIFICATION_TYPES = [
   { value: 'collaboration_request', label: 'Collaboration Request', icon: '🤝' },
   { value: 'vote_received', label: 'Vote Received', icon: '👍' },
   { value: 'milestone_completed', label: 'Milestone Completed', icon: '🎯' },
-  { value: 'funding_received', label: 'Funding Received', icon: '💰' },
+  // Funding notification removed
   { value: 'system_announcement', label: 'System Announcement', icon: '📢' },
 ] as const;
 
-export const DEPLOYED_CONTRACTS = {
-  // Sepolia Testnet Contract Addresses
-  DECENTRALIZED_ORACLE: '0x912b6265AFD7Ed9Cbc3FaEFDC419a3EC108De39A',
-  CROWDFUNDING_PLATFORM: '0x21C3d838E291cD83CeC6D0f52AB2D2b3A19CBc27',
-  CHAINLINK_ETH_USD_PRICE_FEED: '0x694AA1769357215DE4FAC081bf1f309aDC325306', // Sepolia testnet
-} as const;
 
-export const NETWORK_CONFIG = {
-  SEPOLIA: {
-    chainId: 11155111,
-    name: 'Sepolia',
-    rpcUrl: 'https://sepolia.infura.io/v3/YOUR_INFURA_KEY',
-    blockExplorerUrl: 'https://sepolia.etherscan.io',
-    nativeCurrency: {
-      name: 'SepoliaETH',
-      symbol: 'ETH',
-      decimals: 18,
-    },
-  },
-} as const;
+
+
 
 export const APP_CONFIG = {
   name: 'ProjectForge',
   tagline: 'Where Ideas Meet Innovation',
-  description: 'A decentralized platform for crowdfunding innovative projects and sharing groundbreaking ideas.',
+  description: 'A platform for collaborating on innovative projects and sharing groundbreaking ideas.',
   version: '1.0.0',
   author: 'ProjectForge Team',
   social: {
@@ -211,8 +187,7 @@ export const APP_CONFIG = {
     maxLimit: 100,
   },
   features: {
-    enableBlockchain: true,
-    enableCrypto: true,
+  // Blockchain and crypto features removed
     enableNotifications: true,
     enableAnalytics: true,
     enableChat: true,

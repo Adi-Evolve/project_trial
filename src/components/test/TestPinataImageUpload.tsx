@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ipfsService } from '../../services/ipfsService';
-
+// Deprecated: All IPFS/Pinata test logic removed. Use Google Drive or Supabase Storage only.
 const TestPinataImageUpload: React.FC = () => {
   const [testResult, setTestResult] = useState<any>(null);
   const [isRunning, setIsRunning] = useState(false);

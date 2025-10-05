@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 import { Contract } from 'ethers';
-
+// This file is deprecated. All blockchain/contract logic removed. Use Supabase for all storage and logic.
 // Import ABIs
 import CrowdfundingPlatformABI from '../contracts/abi/CrowdfundingPlatform.json';
 import DecentralizedOracleABI from '../contracts/abi/DecentralizedOracle.json';

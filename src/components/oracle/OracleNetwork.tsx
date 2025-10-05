@@ -32,7 +32,7 @@ import {
   Target,
   Activity
 } from 'lucide-react';
-
+// Deprecated: All oracle/blockchain logic removed. Use centralized Supabase logic only.
 interface OracleNetworkProps {
   currentUserAddress?: string;
   onVerificationComplete?: (requestId: number, approved: boolean) => void;

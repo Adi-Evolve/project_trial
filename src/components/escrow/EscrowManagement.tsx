@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   ClockIcon, 
   CheckCircleIcon, 
@@ -9,6 +9,7 @@ import {
   ChartBarIcon
 } from '@heroicons/react/24/outline';
 import { escrowService, Milestone, EscrowRelease, ProjectEscrow } from '../../services/escrowService';
+import { securityService } from '../../services/security';
 import { useAuth } from '../../context/AuthContext';
 
 interface EscrowManagementProps {
@@ -38,17 +39,19 @@ export const EscrowManagement: React.FC<EscrowManagementProps> = ({
     { title: '', description: '', targetAmount: 0, dueDate: '' }
   ]);
 
-  useEffect(() => {
-    loadEscrowData();
-  }, [projectId]);
-
-  const loadEscrowData = async () => {
+  const loadEscrowData = useCallback(async () => {
     setLoading(true);
     try {
       // Load milestones
       const milestonesResult = await escrowService.getProjectMilestones(projectId);
       if (milestonesResult.success) {
         setMilestones(milestonesResult.milestones || []);
+      }
+
+      // Load releases
+      const releasesResult = await escrowService.getProjectReleases(projectId);
+      if (releasesResult.success) {
+        setReleases(releasesResult.releases || []);
       }
 
       // Load escrow status
@@ -61,7 +64,11 @@ export const EscrowManagement: React.FC<EscrowManagementProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
+
+  useEffect(() => {
+    loadEscrowData();
+  }, [loadEscrowData]);
 
   const addMilestoneField = () => {
     setNewMilestones([...newMilestones, { title: '', description: '', targetAmount: 0, dueDate: '' }]);
@@ -79,6 +86,20 @@ export const EscrowManagement: React.FC<EscrowManagementProps> = ({
   };
 
   const createMilestones = async () => {
+    // Guard on client - ensure only owner can create
+    if (!isOwner) {
+      alert('Only the project owner can create milestones.');
+      return;
+    }
+
+    // Verify via DB lookup before attempting create (extra safety)
+    const identity = user?.id || user?.walletAddress;
+    const check = await securityService.enforceOwnerRpc(projectId, identity);
+    if (!check.success) {
+      alert('Ownership verification failed. Action blocked.');
+      return;
+    }
+
     if (!user?.walletAddress) return;
 
     try {
@@ -122,6 +143,20 @@ export const EscrowManagement: React.FC<EscrowManagementProps> = ({
   };
 
   const requestMilestoneRelease = async (milestoneId: string) => {
+    // Client-side guard: only project owner may request releases
+    if (!isOwner) {
+      alert('Only the project owner can request fund releases.');
+      return;
+    }
+
+    // Verify via DB lookup before attempting release request
+    const identity = user?.id || user?.walletAddress;
+    const check = await securityService.enforceOwnerRpc(projectId, identity);
+    if (!check.success) {
+      alert('Ownership verification failed. Action blocked.');
+      return;
+    }
+
     if (!user?.walletAddress) return;
 
     try {

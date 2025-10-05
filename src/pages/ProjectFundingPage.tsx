@@ -13,11 +13,8 @@ import {
   StarIcon,
   WalletIcon
 } from '@heroicons/react/24/outline';
-import DonationWidget from '../components/funding/DonationWidget';
-import { web3Service, ProjectData as BlockchainProjectData } from '../services/web3';
 import { contributionsService } from '../services/contributionsService';
 import { useAuth } from '../context/AuthContext';
-import { localStorageService } from '../services/localStorage';
 import { userRegistrationService } from '../services/userRegistration';
 import { enhancedProjectService } from '../services/enhancedProjectService';
 
@@ -43,8 +40,8 @@ interface ProjectInfo {
     email: string;
   };
   funding: {
-    goal: string; // in ETH
-    raised: string; // in ETH
+    goal: string; // in USD
+    raised: string; // in USD
     backers: number;
     deadline: Date;
   };
@@ -58,7 +55,6 @@ const ProjectFundingPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [project, setProject] = useState<ProjectInfo | null>(null);
-  const [blockchainProject, setBlockchainProject] = useState<BlockchainProjectData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [donations, setDonations] = useState<any[]>([]);
   const [error, setError] = useState<string>('');
@@ -74,13 +70,6 @@ const ProjectFundingPage: React.FC = () => {
     try {
       // Load project from enhanced service (tries localStorage then Supabase)
       const storedProject = await enhancedProjectService.getProjectById(id);
-
-      // If project exists and has a blockchainId, fetch on-chain data
-      let blockchainData: BlockchainProjectData | null = null;
-      if (storedProject && storedProject.blockchainId) {
-        blockchainData = await web3Service.getProject(storedProject.blockchainId);
-        setBlockchainProject(blockchainData);
-      }
 
       // Load donations
       const contributionsResult = await contributionsService.getProjectContributions(id);
@@ -108,16 +97,14 @@ const ProjectFundingPage: React.FC = () => {
           email: creatorDetails?.email || 'creator@project.com'
         },
         funding: {
-    goal: blockchainData?.targetAmount || storedProject.fundingGoal.toString(),
-    raised: blockchainData?.raisedAmount || storedProject.currentFunding.toString(),
+    goal: storedProject.fundingGoal.toString(),
+    raised: storedProject.currentFunding.toString(),
           backers: donations.length,
           deadline: new Date(storedProject.deadline)
         },
         banner: (storedProject.imageUrls && storedProject.imageUrls.length > 0)
           ? storedProject.imageUrls[0]
-          : (storedProject.imageHashes && storedProject.imageHashes.length > 0)
-            ? `https://gateway.pinata.cloud/ipfs/${storedProject.imageHashes[0]}`
-            : 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&h=400&fit=crop',
+          : 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&h=400&fit=crop',
         category: storedProject.category || 'Technology',
         status: storedProject.status as 'active' | 'inactive' | 'completed' | 'cancelled'
       };
@@ -204,7 +191,7 @@ const ProjectFundingPage: React.FC = () => {
             
             <div className="flex items-center space-x-4">
               <div className="text-sm text-gray-600">
-                Network: <span className="font-medium text-blue-600">Sepolia Testnet</span>
+                {/* Removed blockchain/network info */}
               </div>
             </div>
           </div>
@@ -256,7 +243,7 @@ const ProjectFundingPage: React.FC = () => {
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-gray-600">Progress</span>
                   <span className="font-bold text-gray-900">
-                    {parseFloat(project.funding.raised).toFixed(4)} / {parseFloat(project.funding.goal).toFixed(1)} ETH
+                    {parseFloat(project.funding.raised).toFixed(4)} / {parseFloat(project.funding.goal).toFixed(1)} USD
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-4">
@@ -277,7 +264,7 @@ const ProjectFundingPage: React.FC = () => {
                 <div className="text-center p-6 bg-gray-50 rounded-xl">
                   <ChartBarIcon className="w-8 h-8 text-green-600 mx-auto mb-2" />
                   <div className="text-2xl font-bold text-gray-900">
-                    {parseFloat(project.funding.raised).toFixed(4)} ETH
+                    {parseFloat(project.funding.raised).toFixed(4)} USD
                   </div>
                   <div className="text-gray-600">Raised</div>
                 </div>
@@ -322,7 +309,7 @@ const ProjectFundingPage: React.FC = () => {
                       </div>
                       <div className="text-right">
                         <div className="font-bold text-gray-900">
-                          {parseFloat(donation.amount).toFixed(4)} ETH
+                          {parseFloat(donation.amount).toFixed(4)} USD
                         </div>
                         {donation.message && (
                           <div className="text-sm text-gray-500 max-w-xs truncate">
@@ -344,57 +331,7 @@ const ProjectFundingPage: React.FC = () => {
 
           {/* Donation Widget */}
           <div className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <DonationWidget
-                projectId={project.id}
-                projectTitle={project.title}
-                creatorName={project.owner.name}
-                onDonationSuccess={handleDonationSuccess}
-                onDonationError={handleDonationError}
-              />
-            </motion.div>
-
-            {/* Blockchain Info */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4 }}
-              className="bg-white rounded-2xl p-6 shadow-xl border border-gray-200"
-            >
-              <div className="space-y-4">
-                <div className="flex items-start space-x-2">
-                  <ShieldCheckIcon className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-gray-600">
-                    <p className="font-medium text-gray-700 mb-1">Blockchain Security</p>
-                    <p>All transactions are secured by Ethereum blockchain technology. Funds are transferred directly to the project creator's wallet.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start space-x-2">
-                  <WalletIcon className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-gray-600">
-                    <p className="font-medium text-gray-700 mb-1">Testnet Environment</p>
-                    <p>This project uses Sepolia testnet for safe testing. No real money is involved in transactions.</p>
-                  </div>
-                </div>
-
-                {blockchainProject && (
-                  <div className="bg-gray-50 rounded-lg p-4 mt-4">
-                    <h4 className="font-medium text-gray-700 mb-2">Smart Contract Details</h4>
-                    <div className="space-y-1 text-sm text-gray-600">
-                      <div>Network: Sepolia Testnet</div>
-                      <div>Status: {blockchainProject.isActive ? 'Active' : 'Inactive'}</div>
-                      <div>Deadline: {new Date(blockchainProject.deadline * 1000).toLocaleDateString()}</div>
-                      <div>Funds Withdrawn: {blockchainProject.fundsWithdrawn ? 'Yes' : 'No'}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </motion.div>
+            {/* Removed DonationWidget import and usage */}
           </div>
         </div>
       </div>

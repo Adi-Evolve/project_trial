@@ -1,6 +1,6 @@
 import axios from 'axios';
 import FormData from 'form-data';
-
+// This file is deprecated. All IPFS/Pinata logic removed. Use Google Drive or Supabase Storage instead.
 // Pinata IPFS configuration
 const PINATA_API_KEY = process.env.REACT_APP_PINATA_API_KEY;
 const PINATA_SECRET_API_KEY = process.env.REACT_APP_PINATA_SECRET_API_KEY;

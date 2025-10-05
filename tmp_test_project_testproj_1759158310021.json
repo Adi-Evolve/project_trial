@@ -1,0 +1,53 @@
+{
+  "project": {
+    "id": "testproj_1759158310021",
+    "title": "AutoTest Project 1759158310021",
+    "description": "Automatically created project for testing milestones and oracle",
+    "fundingGoal": 1000,
+    "currentFunding": 0,
+    "creatorId": "local-test-user",
+    "milestone_check": true
+  },
+  "milestones": [
+    {
+      "id": "testproj_1759158310021_m_1",
+      "title": "Milestone 1",
+      "description": "Auto-generated milestone 1",
+      "dueDate": "2025-10-06",
+      "targetAmount": 200,
+      "status": "pending"
+    },
+    {
+      "id": "testproj_1759158310021_m_2",
+      "title": "Milestone 2",
+      "description": "Auto-generated milestone 2",
+      "dueDate": "2025-10-13",
+      "targetAmount": 200,
+      "status": "pending"
+    },
+    {
+      "id": "testproj_1759158310021_m_3",
+      "title": "Milestone 3",
+      "description": "Auto-generated milestone 3",
+      "dueDate": "2025-10-20",
+      "targetAmount": 200,
+      "status": "pending"
+    },
+    {
+      "id": "testproj_1759158310021_m_4",
+      "title": "Milestone 4",
+      "description": "Auto-generated milestone 4",
+      "dueDate": "2025-10-27",
+      "targetAmount": 200,
+      "status": "pending"
+    },
+    {
+      "id": "testproj_1759158310021_m_5",
+      "title": "Milestone 5",
+      "description": "Auto-generated milestone 5",
+      "dueDate": "2025-11-03",
+      "targetAmount": 200,
+      "status": "pending"
+    }
+  ]
+}

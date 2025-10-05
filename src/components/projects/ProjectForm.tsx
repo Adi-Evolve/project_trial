@@ -12,7 +12,7 @@ import {
   UserGroupIcon 
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../context/AuthContext';
-import { blockchainService } from '../../services/blockchain';
+// blockchain service removed for centralized version
 import { toast } from 'react-hot-toast';
 
 interface ProjectFormData {
@@ -174,28 +174,13 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ onClose, onSuccess }) => {
         updates: []
       };
 
-      // Register project on blockchain for ownership and authenticity
-      const blockchainRecord = await blockchainService.registerProject({
-        id: projectData.id,
-        title: projectData.title,
-        description: projectData.description,
-        author: user.walletAddress || user.id || '',
-        timestamp: projectData.createdAt,
-        category: projectData.category,
-        tags: projectData.tags
-      });
+      // In centralized version, project registration is handled through database
+      console.log('Project registered successfully:', projectData.id);
 
-      if (blockchainRecord) {
-        projectData.blockchainRecord = blockchainRecord;
-        toast.success('Project created and registered on blockchain!');
-        onSuccess(projectData);
-        onClose();
-      } else {
-        // Still create project even if blockchain registration fails
-        toast.success('Project created successfully!');
-        onSuccess(projectData);
-        onClose();
-      }
+      // Project creation successful
+      toast.success('Project created successfully!');
+      onSuccess(projectData);
+      onClose();
     } catch (error) {
       console.error('Error creating project:', error);
       toast.error('Failed to create project. Please try again.');

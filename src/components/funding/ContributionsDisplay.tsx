@@ -11,7 +11,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { contributionsService, ProjectContribution } from '../../services/contributionsService';
 import { toast } from 'react-hot-toast';
-
+// Deprecated: All funding logic removed. Use centralized Supabase logic only.
 interface ContributionsDisplayProps {
   projectId: string;
   className?: string;

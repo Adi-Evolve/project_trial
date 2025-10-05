@@ -20,7 +20,6 @@ import {
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { enhancedProjectService } from '../services/enhancedProjectService';
-import { oracleService } from '../services/oracleService';
 
 interface ProjectData {
   id: string;
@@ -76,104 +75,22 @@ const EditProjectPage: React.FC = () => {
   const [imageUpload, setImageUpload] = useState<File | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
 
-  // Mock data
+  // Fetch project data from Supabase
   useEffect(() => {
-    const mockProject: ProjectData = {
-      id: id || '1',
-      title: 'AI-Powered Task Manager',
-      description: 'Intelligent task management system with ML-based priority suggestions and automated scheduling.',
-      longDescription: `## Overview
-This project aims to revolutionize task management by incorporating artificial intelligence and machine learning algorithms to help users prioritize and schedule their tasks more effectively.
-
-## Features
-- Smart task prioritization using ML algorithms
-- Automated scheduling based on deadlines and workload
-- Natural language processing for task creation
-- Integration with popular calendar applications
-- Real-time collaboration features
-- Advanced analytics and reporting
-
-## Technical Stack
-- Frontend: React, TypeScript, TailwindCSS
-- Backend: Node.js, Express, PostgreSQL
-- AI/ML: Python, TensorFlow, scikit-learn
-- Deployment: Docker, AWS
-
-## Getting Started
-1. Clone the repository
-2. Install dependencies: \`npm install\`
-3. Set up environment variables
-4. Run the development server: \`npm run dev\``,
-      category: 'productivity',
-      tags: ['AI', 'Machine Learning', 'Productivity', 'Task Management', 'React', 'Node.js'],
-      images: [
-        'https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=800',
-        'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800'
-      ],
-      team: [
-        {
-          id: '1',
-          name: 'Sarah Chen',
-          email: 'sarah@example.com',
-          role: 'owner',
-          avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b563?w=150',
-          permissions: ['edit', 'delete', 'manage_team', 'manage_funding']
-        },
-        {
-          id: '2',
-          name: 'Marcus Rodriguez',
-          email: 'marcus@example.com',
-          role: 'developer',
-          avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
-          permissions: ['edit']
-        }
-      ],
-      visibility: 'public',
-      status: 'active',
-      fundingGoal: 50000,
-      currentFunding: 23750,
-      deadline: '2024-06-30',
-      requirements: [
-        'React.js experience (2+ years)',
-        'Node.js and Express knowledge',
-        'Machine Learning fundamentals',
-        'UI/UX design skills',
-        'Database management (PostgreSQL)'
-      ],
-      milestones: [
-        {
-          id: '1',
-          title: 'MVP Development',
-          description: 'Complete core features and basic UI',
-          dueDate: '2024-03-15',
-          completed: true,
-          completedAt: '2024-03-10'
-        },
-        {
-          id: '2',
-          title: 'AI Integration',
-          description: 'Implement ML algorithms for task prioritization',
-          dueDate: '2024-04-30',
-          completed: false
-        },
-        {
-          id: '3',
-          title: 'Beta Testing',
-          description: 'User testing and feedback collection',
-          dueDate: '2024-05-31',
-          completed: false
-        }
-      ],
-      githubRepo: 'https://github.com/sarahchen/ai-task-manager',
-      demoUrl: 'https://ai-task-manager-demo.vercel.app',
-      createdAt: '2024-01-15T10:30:00Z',
-      updatedAt: '2024-01-20T14:45:00Z'
-    };
-
-    setTimeout(() => {
-      setProjectData(mockProject);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Replace with your Supabase fetching logic
+        // Example:
+        // const { data: project } = await supabase.from('projects').select('*').eq('id', id).single();
+        // setProjectData(project || null);
+        setProjectData(null); // Empty for now, implement real fetch
+      } catch (error) {
+        setProjectData(null);
+      }
       setLoading(false);
-    }, 1000);
+    };
+    fetchData();
   }, [id]);
 
   const handleSave = async (isDraft = false) => {
@@ -302,7 +219,7 @@ This project aims to revolutionize task management by incorporating artificial i
       setProjectData(updated);
       setNewMilestone({ title: '', description: '', dueDate: '' });
 
-      // Persist to Supabase and notify oracle (fire-and-forget)
+      // Persist to Supabase
       (async () => {
         try {
           const res = await enhancedProjectService.updateProject(projectData.id, { milestones: updated.milestones });
@@ -311,8 +228,6 @@ This project aims to revolutionize task management by incorporating artificial i
             toast.error('Failed to save milestone to server (saved locally)');
           } else {
             toast.success('Milestone added');
-            // Reset milestone_check in DB so oracle re-checks
-            await oracleService.onMilestoneAdded(projectData.id);
           }
         } catch (err) {
           console.error('Error saving milestone:', err);
@@ -359,7 +274,6 @@ This project aims to revolutionize task management by incorporating artificial i
     { id: 'media', label: 'Media', icon: PhotoIcon },
     { id: 'team', label: 'Team', icon: UserPlusIcon },
     { id: 'milestones', label: 'Milestones', icon: CalendarIcon },
-    { id: 'funding', label: 'Funding', icon: CurrencyDollarIcon },
     { id: 'settings', label: 'Settings', icon: GlobeAltIcon }
   ];
 
@@ -680,7 +594,6 @@ This project aims to revolutionize task management by incorporating artificial i
                       {activeTab === 'media' && <PhotoIcon className="w-16 h-16 mx-auto" />}
                       {activeTab === 'team' && <UserPlusIcon className="w-16 h-16 mx-auto" />}
                       {activeTab === 'milestones' && <CalendarIcon className="w-16 h-16 mx-auto" />}
-                      {activeTab === 'funding' && <CurrencyDollarIcon className="w-16 h-16 mx-auto" />}
                       {activeTab === 'settings' && <GlobeAltIcon className="w-16 h-16 mx-auto" />}
                     </div>
                     <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">

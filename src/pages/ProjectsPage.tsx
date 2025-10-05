@@ -17,39 +17,7 @@ import { localStorageService } from '../services/localStorage';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabase';
 import { getImageList, getPrimaryImage } from '../utils/image';
-
-interface Project {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  tags: string[];
-  fundingGoal: number;
-  fundingRaised: number;
-  deadline: string;
-  teamSize: number;
-  skillsNeeded: string[];
-  createdBy: string;
-  createdAt: string;
-  status: 'active' | 'funded' | 'expired';
-  supporters: string[];
-  comments: number;
-  likes: number;
-  views: number;
-  bookmarks: number;
-  isLiked?: boolean;
-  isBookmarked?: boolean;
-  trendingScore?: number;
-  matchScore?: number;
-  creator: {
-    id: string;
-    username: string;
-    avatar: string;
-    verified: boolean;
-  };
-  images?: string[];
-  blockchainRecord?: any;
-}
+import { Project } from '../types';
 
 const PROJECT_CATEGORIES = [
   'All', 'Technology', 'Healthcare', 'Education', 'Environment', 'Gaming',
@@ -81,10 +49,7 @@ const ProjectsPage: React.FC = () => {
   
   // Filter states
   const [filters, setFilters] = useState({
-    minFunding: 0,
-    maxFunding: 1000000,
     status: 'all',
-    hasBlockchain: false,
     teamSizeMin: 1,
     teamSizeMax: 50
   });
@@ -171,46 +136,63 @@ const ProjectsPage: React.FC = () => {
       }
 
       // Transform the data to match our Project interface
-          const transformedProjects: Project[] = (projectsData || []).map((project: any) => {
+      const transformedProjects: Project[] = (projectsData || []).map((project: any) => {
         return {
           id: project.id,
           title: project.title,
           description: project.description,
+          shortDescription: project.description?.substring(0, 150) + '...' || '',
+          images: getImageList(project),
+          videos: [],
           category: project.category || 'General',
           tags: project.tags || [],
-          fundingGoal: project.funding_goal || 0,
-          fundingRaised: project.funding_raised || 0,
-          deadline: project.deadline || '',
-          teamSize: project.team_size || 1,
+          status: (project.status as 'active' | 'completed' | 'paused') || 'active',
+          visibility: 'public' as const,
+          targetAmount: 0, // No funding in centralized version
+          currentAmount: 0,
+          currency: 'USD' as const,
+          startDate: project.created_at,
+          endDate: project.deadline,
+          requirements: [],
           skillsNeeded: project.skills_needed || [],
-          createdBy: project.creator_id,
-          createdAt: project.created_at,
-          status: (project.status as 'active' | 'funded' | 'expired') || 'active',
-          supporters: project.supporters || [],
-          comments: project.comment_count || 0,
-          likes: project.like_count || 0,
+          teamSize: project.team_size || 1,
+          currentTeamSize: 1,
+          location: project.location,
+          remote: project.remote || false,
+          owner: {
+            id: project.creator_id,
+            email: '',
+            username: project.users?.username || 'Unknown Creator',
+            fullName: project.users?.full_name || project.users?.username || 'Unknown Creator',
+            avatar: project.users?.avatar_url || '',
+            avatarUrl: project.users?.avatar_url || '',
+            bio: project.users?.bio || '',
+            location: project.users?.location || '',
+            website: project.users?.website || '',
+            skills: [],
+            fieldsOfInterest: [],
+            reputation: 0,
+            verified: false,
+            githubProfile: project.users?.github_profile || '',
+            linkedinProfile: project.users?.linkedin_profile || '',
+            portfolioUrl: project.users?.portfolio_url || '',
+            createdAt: project.users?.created_at || project.created_at,
+            updatedAt: project.users?.updated_at || project.created_at
+          },
+          collaborators: [],
+          upvotes: project.like_count || 0,
+          downvotes: 0,
           views: project.view_count || 0,
           bookmarks: project.bookmark_count || 0,
-          isLiked: false, // Would need additional query for user-specific data
-          isBookmarked: false, // Would need additional query for user-specific data
-          creator: {
-            id: project.creator_id,
-            username: project.users?.username || 'Unknown Creator',
-            avatar: project.users?.avatar_url || '',
-            verified: false // Could be enhanced with verification system
-          },
-          images: getImageList(project),
-          blockchainRecord: project.blockchain_record ? {
-            txHash: project.blockchain_record.tx_hash,
-            verified: project.blockchain_record.verified || true,
-            blockNumber: project.blockchain_record.block_number,
-            timestamp: project.blockchain_record.timestamp
-          } : undefined
+          comments: [],
+          updates: [],
+          createdAt: project.created_at,
+          updatedAt: project.updated_at || project.created_at
         };
       });
 
-      // Filter only active projects
-      const activeProjects = transformedProjects.filter(p => p.status === 'active');
+      // Filter only active/in_progress projects
+      const activeProjects = transformedProjects.filter(p => p.status === 'in_progress' || p.status === 'seeking_team');
 
       setProjects(activeProjects);
       setFilteredProjects(activeProjects);
@@ -241,24 +223,12 @@ const ProjectsPage: React.FC = () => {
     }
 
     try {
-
-      
-      // Get current project
-      const currentProject = projects.find(p => p.id === projectId);
-      if (!currentProject) {
-        toast.error('Project not found');
-        return;
-      }
-
-      const isCurrentlyLiked = currentProject.isLiked;
-      
-      // Update local state immediately for responsive UI
+      // Update upvotes in local state (no user-specific tracking in centralized version)
       setProjects(prev => prev.map(project => 
         project.id === projectId 
           ? { 
               ...project, 
-              likes: isCurrentlyLiked ? project.likes - 1 : project.likes + 1, 
-              isLiked: !isCurrentlyLiked 
+              upvotes: project.upvotes + 1
             }
           : project
       ));
@@ -268,18 +238,12 @@ const ProjectsPage: React.FC = () => {
         project.id === projectId 
           ? { 
               ...project, 
-              likes: isCurrentlyLiked ? project.likes - 1 : project.likes + 1, 
-              isLiked: !isCurrentlyLiked 
+              upvotes: project.upvotes + 1
             }
           : project
       ));
 
-      // For now, just show success message
-      // In a full implementation, this would update localStorage with user interactions
-      const action = isCurrentlyLiked ? 'unliked' : 'liked';
-      toast.success(`Project ${action} successfully! 👍`);
-      
-
+      toast.success('Project liked successfully! 👍');
 
     } catch (error) {
       console.error('Error in handleLikeProject:', error);
@@ -305,7 +269,7 @@ const ProjectsPage: React.FC = () => {
         project.title.toLowerCase().includes(query) ||
         project.description.toLowerCase().includes(query) ||
         project.tags.some(tag => tag.toLowerCase().includes(query)) ||
-        project.creator.username.toLowerCase().includes(query)
+                project.owner.username.toLowerCase().includes(query)
       );
     }
 
@@ -317,9 +281,7 @@ const ProjectsPage: React.FC = () => {
     // Additional filters
     filtered = filtered.filter(project => {
       if (filters.status !== 'all' && project.status !== filters.status) return false;
-      if (project.fundingGoal < filters.minFunding || project.fundingGoal > filters.maxFunding) return false;
-      if (project.teamSize < filters.teamSizeMin || project.teamSize > filters.teamSizeMax) return false;
-      if (filters.hasBlockchain && !project.blockchainRecord) return false;
+  if (project.teamSize < filters.teamSizeMin || project.teamSize > filters.teamSizeMax) return false;
       return true;
     });
 
@@ -330,12 +292,12 @@ const ProjectsPage: React.FC = () => {
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         case 'oldest':
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        case 'funding':
-          return b.fundingRaised - a.fundingRaised;
+        // case 'funding':
+        //   return b.fundingRaised - a.fundingRaised;
         case 'popular':
-          return b.likes - a.likes;
+          return b.upvotes - a.upvotes;
         case 'deadline':
-          return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+          return new Date(a.endDate || Date.now()).getTime() - new Date(b.endDate || Date.now()).getTime();
         case 'team-size':
           return b.teamSize - a.teamSize;
         default:
@@ -408,54 +370,16 @@ const ProjectsPage: React.FC = () => {
       project.id === projectId
         ? {
             ...project,
-            isBookmarked: !project.isBookmarked,
-            bookmarks: project.isBookmarked ? project.bookmarks - 1 : project.bookmarks + 1
+            bookmarks: project.bookmarks + 1 // Since we don't track user-specific bookmarks in centralized version
           }
         : project
     ));
     toast.success('Project bookmarked!');
   };
 
-  // Transform projects for display
-  const transformProjectsForDisplay = (projects: Project[]) => {
-    return projects.map(project => ({
-      id: project.id,
-      title: project.title,
-      description: project.description,
-      author: {
-        name: project.creator.username,
-        avatar: project.creator.avatar || '/avatars/default.jpg',
-        verified: project.creator.verified
-      },
-      category: project.category,
-      tags: project.tags,
-      currentAmount: project.fundingRaised,
-      targetAmount: project.fundingGoal,
-      backers: project.supporters.length,
-      daysLeft: Math.ceil((new Date(project.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
-      images: project.images || ['/projects/default.jpg'],
-      createdAt: project.createdAt,
-      updatedAt: project.createdAt,
-      likes: project.likes,
-      views: project.views,
-      isLiked: project.isLiked || false,
-      isBookmarked: project.isBookmarked || false,
-      engagementScore: project.likes + project.views * 0.1 + project.comments * 2,
-      comments: [], // Would be populated from actual comments API
-      upvotes: Math.floor(project.likes * 1.2), // Mock upvotes
-      downvotes: Math.floor(project.likes * 0.1), // Mock downvotes
-      rating: 4.2 + Math.random() * 0.8, // Mock rating
-      userVote: null as 'up' | 'down' | null,
-      userRating: 0
-    }));
-  };
-
   const resetFilters = () => {
     setFilters({
-      minFunding: 0,
-      maxFunding: 1000000,
       status: 'all',
-      hasBlockchain: false,
       teamSizeMin: 1,
       teamSizeMax: 50
     });
@@ -618,29 +542,7 @@ const ProjectsPage: React.FC = () => {
                 className="mt-4 pt-4 border-t border-secondary-700/50"
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Min Funding Goal
-                    </label>
-                    <input
-                      type="number"
-                      value={filters.minFunding}
-                      onChange={(e) => setFilters(prev => ({ ...prev, minFunding: Number(e.target.value) }))}
-                      className="w-full px-3 py-2 bg-secondary-700 border border-secondary-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Max Funding Goal
-                    </label>
-                    <input
-                      type="number"
-                      value={filters.maxFunding}
-                      onChange={(e) => setFilters(prev => ({ ...prev, maxFunding: Number(e.target.value) }))}
-                      className="w-full px-3 py-2 bg-secondary-700 border border-secondary-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -658,17 +560,7 @@ const ProjectsPage: React.FC = () => {
                     </select>
                   </div>
 
-                  <div className="flex items-center space-x-3">
-                    <label className="flex items-center space-x-2 text-sm text-gray-300">
-                      <input
-                        type="checkbox"
-                        checked={filters.hasBlockchain}
-                        onChange={(e) => setFilters(prev => ({ ...prev, hasBlockchain: e.target.checked }))}
-                        className="rounded border-secondary-600 bg-secondary-700 text-primary-500 focus:ring-primary-500"
-                      />
-                      <span>Blockchain Verified</span>
-                    </label>
-                  </div>
+
                 </div>
               </motion.div>
             )}
@@ -714,7 +606,46 @@ const ProjectsPage: React.FC = () => {
                     transition={{ delay: index * 0.1 }}
                   >
                     <ProjectCard
-                      project={project}
+                      project={{
+                        // Transform imported Project type to ProjectCard interface
+                        id: project.id,
+                        title: project.title,
+                        description: project.description,
+                        category: project.category,
+                        tags: project.tags,
+                        fundingGoal: project.targetAmount || 0,
+                        fundingRaised: project.currentAmount || 0,
+                        deadline: project.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                        teamSize: project.teamSize,
+                        skillsNeeded: project.skillsNeeded,
+                        createdBy: project.owner.id,
+                        createdAt: project.createdAt,
+                        status: project.status === 'in_progress' ? 'active' : 
+                               project.status === 'completed' ? 'funded' : 'expired',
+                        supporters: [],
+                        comments: project.comments?.length || 0,
+                        likes: project.upvotes || 0,
+                        views: project.views || 0,
+                        bookmarks: project.bookmarks || 0,
+                        shares: 0,
+                        upvotes: project.upvotes || 0,
+                        downvotes: project.downvotes || 0,
+                        rating: 0,
+                        totalRatings: 0,
+                        isLiked: false,
+                        isBookmarked: false,
+                        hasUpvoted: false,
+                        hasDownvoted: false,
+                        hasRated: false,
+                        userRating: 0,
+                        creator: {
+                          id: project.owner.id,
+                          username: project.owner.username || project.owner.fullName || 'Unknown',
+                          avatar: project.owner.avatarUrl || '/avatars/default.jpg',
+                          verified: project.owner.verified || false
+                        },
+                        images: project.images || []
+                      }}
                       onLike={handleLikeProject}
                       onComment={handleComment}
                       onShare={handleShare}

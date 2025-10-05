@@ -225,8 +225,8 @@ const SettingsPage: React.FC = () => {
             { key: 'project_updates', label: 'Project Updates', desc: 'Notifications about projects you follow' },
             { key: 'comment_replies', label: 'Comment Replies', desc: 'When someone replies to your comments' },
             { key: 'collaboration_requests', label: 'Collaboration Requests', desc: 'Invitations to join projects' },
-            { key: 'funding_updates', label: 'Funding Updates', desc: 'Updates about project funding' },
-            { key: 'weekly_digest', label: 'Weekly Digest', desc: 'Summary of platform activity' }
+            { key: 'weekly_digest', label: 'Weekly Digest', desc: 'Summary of platform activity' },
+            { key: 'security_alerts', label: 'Security Alerts', desc: 'Important security notifications' }
           ].map((notification) => (
             <div key={notification.key} className="flex items-center justify-between">
               <div>

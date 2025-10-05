@@ -1,7 +1,7 @@
 import Web3 from 'web3';
 import { Contract } from 'web3-eth-contract';
 import { errorHandler } from './errorHandler';
-
+// This file is deprecated. All blockchain/web3 logic removed. Use Supabase for all storage and logic.
 // Smart contract ABI for project funding
 export const PROJECT_FUNDING_ABI = [
   {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { testPinataImageUpload } from '../utils/testPinata';
-
+// Deprecated: All IPFS/Pinata test logic removed. Use Google Drive or Supabase Storage only.
 const PinataTestPage: React.FC = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);

@@ -1,7 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { blockchainService } from '../../services/blockchain';
 import { toast } from 'react-hot-toast';
 
+// blockchain service removed for centralized version
+// Mock blockchain service for demo purposes
+const mockBlockchainService = {
+  getCurrentAccount: async () => 'demo-account-0x123',
+  getOracleStats: async () => ({ totalNodes: 5, activeNodes: 3, totalVerifications: 100 }),
+  getETHPrice: async () => 2000,
+  connectWallet: async () => 'demo-connected-0x456',
+  switchToCorrectNetwork: async (...args: any[]) => true,
+  createCampaign: async (...args: any[]) => ({ success: true, campaignId: Date.now() }),
+  registerOracleNode: async (...args: any[]) => ({ success: true, nodeId: 'demo-oracle-' + Date.now() }),
+  getCampaignCount: async () => 5,
+  getCampaign: async (...args: any[]) => ({ id: 1, title: 'Demo Campaign', status: 'active' })
+};
+// Deprecated: All blockchain/contract test logic removed. Use centralized Supabase logic only.
 interface ContractTestProps {}
 
 const ContractTest: React.FC<ContractTestProps> = () => {
@@ -24,15 +37,15 @@ const ContractTest: React.FC<ContractTestProps> = () => {
   const loadInitialData = async () => {
     try {
       // Check if already connected
-      const account = await blockchainService.getCurrentAccount();
+      const account = await mockBlockchainService.getCurrentAccount();
       setConnectedAccount(account);
 
       // Load oracle stats
-      const stats = await blockchainService.getOracleStats();
+      const stats = await mockBlockchainService.getOracleStats();
       setOracleStats(stats);
 
       // Get ETH price from Chainlink
-      const price = await blockchainService.getETHPrice();
+      const price = await mockBlockchainService.getETHPrice();
       setEthPrice(price);
     } catch (error) {
       console.error('Failed to load initial data:', error);
@@ -42,11 +55,11 @@ const ContractTest: React.FC<ContractTestProps> = () => {
   const connectWallet = async () => {
     setLoading(true);
     try {
-      const account = await blockchainService.connectWallet();
+      const account = await mockBlockchainService.connectWallet();
       setConnectedAccount(account);
       
       // Switch to Sepolia testnet
-      const switched = await blockchainService.switchToCorrectNetwork(11155111);
+      const switched = await mockBlockchainService.switchToCorrectNetwork(11155111);
       if (switched) {
         toast.success('Switched to Sepolia testnet');
       }
@@ -65,7 +78,7 @@ const ContractTest: React.FC<ContractTestProps> = () => {
 
     setLoading(true);
     try {
-      const result = await blockchainService.createCampaign(
+      const result = await mockBlockchainService.createCampaign(
         campaignData.title,
         campaignData.description,
         campaignData.goalAmount,
@@ -74,7 +87,7 @@ const ContractTest: React.FC<ContractTestProps> = () => {
       );
 
       if (result) {
-        toast.success(`Campaign created! TX: ${result.txHash}`);
+        toast.success(`Campaign created! ID: ${result.campaignId}`);
         console.log('Campaign creation result:', result);
       }
     } catch (error) {
@@ -92,15 +105,15 @@ const ContractTest: React.FC<ContractTestProps> = () => {
 
     setLoading(true);
     try {
-      const result = await blockchainService.registerOracleNode(
+      const result = await mockBlockchainService.registerOracleNode(
         'https://api.example.com/oracle',
         '1.0' // 1 ETH stake
       );
 
       if (result) {
-        toast.success(`Registered as oracle! TX: ${result.txHash}`);
+        toast.success(`Registered as oracle! Node ID: ${result.nodeId}`);
         // Reload oracle stats
-        const stats = await blockchainService.getOracleStats();
+        const stats = await mockBlockchainService.getOracleStats();
         setOracleStats(stats);
       }
     } catch (error) {
@@ -112,11 +125,11 @@ const ContractTest: React.FC<ContractTestProps> = () => {
 
   const getCampaignInfo = async () => {
     try {
-      const count = await blockchainService.getCampaignCount();
+      const count = await mockBlockchainService.getCampaignCount();
       toast.success(`Total campaigns: ${count}`);
       
       if (count > 0) {
-        const campaign = await blockchainService.getCampaign(count - 1);
+        const campaign = await mockBlockchainService.getCampaign(count - 1);
         if (campaign) {
           console.log('Latest campaign:', campaign);
           toast.success(`Latest campaign: ${campaign.title}`);

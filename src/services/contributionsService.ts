@@ -1,34 +1,14 @@
-import { supabase } from './supabase';
-import EnhancedSupabaseService from './enhancedSupabase';
-import { toast } from 'react-hot-toast';
+// ❌ DEPRECATED: This file is no longer needed
+// The simplified ProjectForge platform does not include funding/contribution features
+// All funding-related functionality has been removed
+// This file can be safely deleted
 
-export interface ContributionData {
-  id?: string;
-  project_id: string;
-  contributor_id: string | null; // Allow null for anonymous contributions
-  amount: number;
-  currency: string;
-  blockchain_tx_hash: string;
-  block_number?: number;
-  gas_used?: number;
-  gas_price?: number;
-  transaction_fee?: number;
-  status: 'pending' | 'confirmed' | 'failed';
-  contribution_message?: string;
-  is_anonymous?: boolean;
-  is_zkp?: boolean;
-  reward_tier?: string;
-  created_at?: string;
-  confirmed_at?: string;
-}
+// If you need project interaction tracking, consider using:
+// - Project likes (handled in main project service)
+// - Comments (handled in comments service)
+// - User follows (handled in user service)
 
-export interface ProjectContribution {
-  id: string;
-  amount: number;
-  currency: string;
-  contributor_name?: string;
-  contribution_message?: string;
-  is_anonymous: boolean;
+export default null;
   created_at: string;
   confirmed_at?: string;
   blockchain_tx_hash: string;
